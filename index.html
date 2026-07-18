@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f2eee5" />
+    <title>Idea Dojo — sit with an idea</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="wordmark" href="#top" aria-label="Idea Dojo home"><span class="mark">✳</span> idea dojo</a>
+        <nav class="nav" aria-label="Main navigation">
+          <button class="nav-link active" data-view="garden">my garden</button>
+          <button class="nav-link" data-view="dojo">the dojo <span class="nav-dot"></span></button>
+        </nav>
+        <button class="profile-button" aria-label="Open profile">RD <span>⌄</span></button>
+      </header>
+
+      <section class="view garden-view" id="garden-view" data-view-panel="garden">
+        <div class="intro-row">
+          <div>
+            <p class="eyebrow">a quiet place for unfinished thoughts</p>
+            <h1>What wants to<br /><em>become?</em></h1>
+          </div>
+          <div class="intro-note">You don’t have to solve<br />it today. Just visit.</div>
+        </div>
+
+        <div class="garden-grid">
+          <button class="seed-card new-seed" id="new-seed-button">
+            <span class="plus">+</span>
+            <span class="card-label">plant a new seed</span>
+            <span class="card-hint">something half-formed is welcome</span>
+          </button>
+
+          <button class="idea-card idea-card-lilac" data-open-idea>
+            <span class="idea-status">resting · 2 days</span>
+            <span class="mini-creature mini-lilac" aria-hidden="true">◒</span>
+            <strong>the neighborhood<br />of tiny libraries</strong>
+            <span class="idea-footer">a curious little thing <span>↗</span></span>
+          </button>
+
+          <button class="idea-card idea-card-ochre" data-open-idea>
+            <span class="idea-status">in the dojo · today</span>
+            <span class="mini-creature mini-ochre" aria-hidden="true">✦</span>
+            <strong>a dinner party<br />for strangers</strong>
+            <span class="idea-footer">a brave one <span>↗</span></span>
+          </button>
+        </div>
+
+        <div class="garden-footer">
+          <span><span class="pulse"></span> 2 ideas are dreaming</span>
+          <span class="footer-motto">the best ideas like a little space</span>
+        </div>
+      </section>
+
+      <section class="view dojo-view hidden" id="dojo-view" data-view-panel="dojo">
+        <div class="dojo-header">
+          <button class="back-button" data-view="garden">← garden</button>
+          <div class="dojo-title"><span class="eyebrow">quiet match · 01</span><h2>the dojo</h2></div>
+          <span class="round-count">round 2 <i>/</i> 3</span>
+        </div>
+
+        <div class="match-area">
+          <div class="match-copy">
+            <p class="eyebrow">your idea is wondering</p>
+            <blockquote id="idea-question">“What would make a stranger feel<br />at home in a room they’ve never seen?”</blockquote>
+            <p class="match-caption">No right answer. Follow the interesting one.</p>
+          </div>
+          <div class="creature-stage" aria-label="Idea creature resting in the dojo">
+            <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+            <div class="pixel-creature" id="pixel-creature">
+              <span class="ear ear-left"></span><span class="ear ear-right"></span>
+              <span class="body"><i class="eye eye-left"></i><i class="eye eye-right"></i><b></b></span>
+              <span class="foot foot-left"></span><span class="foot foot-right"></span>
+            </div>
+            <span class="creature-name">morrow</span>
+          </div>
+        </div>
+
+        <div class="move-panel">
+          <p class="eyebrow">choose a gentle move</p>
+          <div class="move-grid">
+            <button class="move-button" data-question="What is the smallest version of this that could exist?" data-move="make it small"><span>01</span> make it small</button>
+            <button class="move-button" data-question="What strange companion would help this idea grow?" data-move="find a companion"><span>02</span> find a companion</button>
+            <button class="move-button" data-question="What does this idea know that you don’t yet?" data-move="ask it back"><span>03</span> ask it back</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="seed-modal hidden" id="seed-modal" role="dialog" aria-modal="true" aria-labelledby="seed-title">
+        <div class="modal-card">
+          <button class="close-button" id="close-modal" aria-label="Close">×</button>
+          <p class="eyebrow">planting ceremony</p>
+          <h2 id="seed-title">Give it somewhere<br /><em>to begin.</em></h2>
+          <textarea id="seed-input" placeholder="An idea, a question, a strange little hunch..." maxlength="240"></textarea>
+          <div class="modal-actions"><span id="character-count">0 / 240</span><button class="primary-button" id="plant-button">plant the seed <span>→</span></button></div>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
