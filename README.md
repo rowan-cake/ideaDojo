@@ -15,10 +15,13 @@ The app starts a Vite client and the local dojo API together. Visit `http://127.
 
 The backend is intentionally play-first. It keeps each encounter in memory and exposes:
 
+- `GET /api/ideas` — restore the three user-planted garden ideas
+- `POST /api/ideas` — save a planted idea into one of the three open clearings
 - `POST /api/dojo/sessions` — open an encounter for an idea
 - `POST /api/dojo/sessions/:sessionId/moves` — make a move: `circle`, `grapple`, `listen`, or `play`
 - `GET /api/dojo/senseis` — list the available perspective characters
 - `GET /api/health` — see whether the API is in ambient or OpenAI mode
 
 Without credentials, the API uses a deterministic ambient response set. To enable occasional model nudges, copy `.env.example` to `.env` and set both `OPENAI_API_KEY` and `OPENAI_MODEL`. The model is asked only on selected moves or every third turn, so the dojo remains a game rather than a chatbot.
-...
+
+Planted ideas are cached in the browser for immediate offline feedback and persisted by the local API in `server/data/ideas.json`. Dojo encounter turns remain in memory and reset whenever the API process restarts.

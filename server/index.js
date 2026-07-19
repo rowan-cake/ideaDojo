@@ -1,12 +1,54 @@
 import "dotenv/config";
 import http from "node:http";
 import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import OpenAI from "openai";
 
 const port = Number(process.env.PORT || 8787);
 const sessions = new Map();
+const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
+const ideasFile = process.env.IDEA_DOJO_DATA_FILE || path.join(serverDirectory, "data", "ideas.json");
 const model = process.env.OPENAI_MODEL;
 const client = process.env.OPENAI_API_KEY && model ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+
+function normalizeIdea(value) {
+  const slot = Number(value?.slot);
+  if (![5, 6, 7].includes(slot) || !value?.id || !value?.seed) return null;
+  return {
+    id: String(value.id).slice(0, 80),
+    slot,
+    name: String(value.name || "sprout").slice(0, 24),
+    title: String(value.title || value.seed).slice(0, 120),
+    seed: String(value.seed).slice(0, 240),
+    description: String(value.description || value.seed).slice(0, 300),
+    tone: ["lilac", "ochre", "moss", "blue"].includes(value.tone) ? value.tone : "moss",
+    quip: String(value.quip || "I am still becoming. What do you notice?").slice(0, 140),
+    createdAt: String(value.createdAt || new Date().toISOString()),
+  };
+}
+
+async function loadIdeas() {
+  try {
+    const values = JSON.parse(await readFile(ideasFile, "utf8"));
+    const bySlot = new Map();
+    values.map(normalizeIdea).filter(Boolean).forEach((idea) => bySlot.set(idea.slot, idea));
+    return bySlot;
+  } catch (error) {
+    if (error?.code !== "ENOENT") console.warn("Unable to load planted ideas.", error.message);
+    return new Map();
+  }
+}
+
+const plantedIdeas = await loadIdeas();
+
+async function persistIdeas() {
+  await mkdir(path.dirname(ideasFile), { recursive: true });
+  const temporaryFile = `${ideasFile}.tmp`;
+  await writeFile(temporaryFile, `${JSON.stringify([...plantedIdeas.values()], null, 2)}\n`, "utf8");
+  await rename(temporaryFile, ideasFile);
+}
 
 const senseis = [
   { id: "gardener", name: "The Gardener", quality: "notices what needs patience" },
@@ -107,6 +149,21 @@ async function handle(request, response) {
 
   if (request.method === "GET" && url.pathname === "/api/dojo/senseis") {
     return sendJson(response, 200, { senseis });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/ideas") {
+    return sendJson(response, 200, { ideas: [...plantedIdeas.values()] });
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/ideas") {
+    const body = await readJson(request);
+    const idea = normalizeIdea(body.idea);
+    if (!idea) return sendJson(response, 400, { error: "A planted idea needs a seed and an open clearing." });
+    const occupant = plantedIdeas.get(idea.slot);
+    if (occupant && occupant.id !== idea.id) return sendJson(response, 409, { error: "That clearing is already growing an idea." });
+    plantedIdeas.set(idea.slot, idea);
+    await persistIdeas();
+    return sendJson(response, occupant ? 200 : 201, { idea });
   }
 
   if (request.method === "POST" && url.pathname === "/api/dojo/sessions") {
