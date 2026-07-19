@@ -13,21 +13,21 @@
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <a class="wordmark" href="#top" aria-label="Idea Dojo home"><span class="mark">✳</span> idea dojo</a>
+        <a class="wordmark" href="/" data-route-to="/" aria-label="Idea Dojo home"><span class="mark">✳</span> idea dojo</a>
         <nav class="nav" aria-label="Main navigation">
-          <button class="nav-link active" data-view="garden">my garden</button>
-          <button class="nav-link" data-view="dojo">the dojo <span class="nav-dot"></span></button>
+          <a class="nav-link active" href="/" data-route-to="/" data-nav="dojo">the dojo <span class="nav-dot"></span></a>
+          <a class="nav-link" href="/labyrinth" data-route-to="/labyrinth" data-nav="labyrinth">the labyrinth</a>
         </nav>
         <button class="profile-button" aria-label="Open profile">RD <span>⌄</span></button>
       </header>
 
-      <section class="view garden-view" id="garden-view" data-view-panel="garden">
+      <section class="view labyrinth-view hidden" id="labyrinth-view" data-view-panel="labyrinth">
         <div class="intro-row">
           <div>
-            <p class="eyebrow">a quiet place for unfinished thoughts</p>
-            <h1>What wants to <em>become?</em></h1>
+            <p class="eyebrow">the labyrinth · where ideas take root</p>
+            <h1>Plant a guest for<br />the <em>dojo.</em></h1>
           </div>
-          <div class="intro-note">You don’t have to solve<br />it today. Just visit.</div>
+          <div class="intro-note">Plant, visit, and prune ideas here. When one is ready, escort it to the mat.</div>
         </div>
 
         <div class="labyrinth-heading">
@@ -132,16 +132,22 @@
           <span><span class="pulse"></span> <span id="garden-count">4 of 7 ideas are growing</span></span>
           <span class="footer-motto">give the idea room to grow</span>
         </div>
+        <p class="sr-only" id="labyrinth-status" aria-live="polite"></p>
       </section>
 
-      <section class="view dojo-view hidden" id="dojo-view" data-view-panel="dojo">
+      <section class="view dojo-view hidden" id="roster-view" data-view-panel="roster">
         <div class="dojo-header">
-          <button class="back-button" data-route="garden">← garden</button>
-          <div class="dojo-title"><span class="eyebrow">choose what meets you</span><h2>the dojo</h2></div>
+          <a class="back-button" href="/" data-route-to="/">← empty mat</a>
+          <div class="dojo-title"><span class="eyebrow">invite a training partner</span><h2>dojo guests</h2></div>
           <span class="round-count" id="dojo-count">4 guests</span>
         </div>
 
-        <div class="dojo-intro"><p>Choose an idea to meet on the mat.</p><span>No score. No outcome required.</span></div>
+        <div class="dojo-intro"><p>Who will meet you on the mat?</p><span>No score. No outcome required.</span></div>
+
+        <div class="roster-actions" aria-label="Roster actions">
+          <a class="secondary-button" href="/" data-route-to="/">return to the empty mat</a>
+          <a class="primary-button" href="/labyrinth" data-route-to="/labyrinth">enter the labyrinth to plant an idea <span>→</span></a>
+        </div>
 
         <div class="idea-roster" aria-label="Ideas ready for the dojo">
           <button class="roster-idea" data-static-idea data-enter-dojo data-idea-id="tiny-libraries" data-idea-title="the neighborhood of tiny libraries" data-idea-name="morrow" data-idea-seed="A neighborhood network of tiny, welcoming libraries." data-idea-tone="lilac">
@@ -163,15 +169,17 @@
         </div>
       </section>
 
-      <section class="view arena-view hidden" id="arena-view" data-view-panel="arena">
+      <section class="view arena-view is-empty" id="arena-view" data-view-panel="dojo">
         <div class="arena-header">
-          <button class="back-button" data-route="dojo">← choose an idea</button>
-          <div class="arena-title"><span class="eyebrow" id="arena-kicker">quiet encounter</span><h2 id="arena-idea-name">amble</h2></div>
-          <span class="round-count">no points</span>
+          <a class="back-button encounter-only" href="/dojo/ideas" data-route-to="/dojo/ideas">← choose an idea</a>
+          <span class="header-spacer empty-only" aria-hidden="true"></span>
+          <div class="arena-title"><span class="eyebrow" id="arena-kicker">the mat is ready</span><h2 id="arena-idea-name">the dojo</h2></div>
+          <span class="round-count encounter-only">no points</span>
+          <span class="round-count empty-only">waiting for a guest</span>
         </div>
 
         <div class="arena-layout">
-          <div class="arena-scene" id="arena-scene" aria-label="A playful dojo mat. Drag from the penguin toward the idea and release to launch.">
+          <div class="arena-scene" id="arena-scene" aria-label="An empty dojo mat waiting for an invited idea" data-movement="disabled">
             <div class="dojo-back-wall" aria-hidden="true">
               <span class="paper-screen screen-left"></span><span class="wood-cubbies"></span><span class="blank-banner banner-one"></span><span class="blank-banner banner-two"></span><span class="paper-screen screen-right"></span>
             </div>
@@ -184,6 +192,12 @@
               <span id="arena-tree-label">amble</span>
             </div>
             <img class="player-avatar" id="player-avatar" src="/assets/dojo-player.png" alt="A small penguin dojo trainee" draggable="false" />
+            <div class="empty-dojo-state empty-only">
+              <p class="eyebrow">the mat begins empty</p>
+              <h1>Invite an idea<br />to <em>practice.</em></h1>
+              <p>Choose a training partner from the roster. Nothing begins until you invite one in.</p>
+              <a class="primary-button invite-button" href="/dojo/ideas" data-route-to="/dojo/ideas">invite an idea <span>→</span></a>
+            </div>
             <div class="grapple-qte hidden" id="grapple-qte" role="status" aria-live="assertive">
               <span class="qte-kicker">the idea is wriggling free</span>
               <strong>GRAPPLE!</strong>
@@ -191,12 +205,13 @@
               <div class="qte-meter"><i id="qte-progress"></i></div>
               <small id="qte-timer">4.0 seconds</small>
             </div>
-            <div class="arena-prompt"><p class="eyebrow" id="dojo-presence">the mat is empty</p><blockquote id="idea-question">“Drag toward the idea. Let go.”</blockquote><p id="dojo-beat">Aim, release, and see what the collision shakes loose.</p></div>
+            <div class="arena-prompt encounter-only"><p class="eyebrow" id="dojo-presence">the mat is empty</p><blockquote id="idea-question">“Drag toward the idea. Let go.”</blockquote><p id="dojo-beat">Aim, release, and see what the collision shakes loose.</p></div>
           </div>
-          <aside class="arena-note"><span class="eyebrow">today’s guest</span><h3 id="arena-idea-title">a dinner party for strangers</h3><p id="arena-description">A brave table where no one has to arrive knowing anyone.</p><span class="arena-note-foot">This is an interaction sketch. Movement and play come before language.</span></aside>
+          <aside class="arena-note encounter-only"><span class="eyebrow">today’s guest</span><h3 id="arena-idea-title">a dinner party for strangers</h3><p id="arena-description">A brave table where no one has to arrive knowing anyone.</p><span class="arena-note-foot">This is an interaction sketch. Movement and play come before language.</span></aside>
+          <aside class="empty-dojo-note empty-only"><span class="eyebrow">before the encounter</span><p>The dojo does not choose for you. Each visit begins with room to decide what deserves your attention.</p><a href="/labyrinth" data-route-to="/labyrinth">or plant a new idea in the labyrinth →</a></aside>
         </div>
 
-        <div class="arena-controls">
+        <div class="arena-controls encounter-only">
           <p><strong>drag → aim → release</strong><span>The farther you drag, the stronger the slide.</span></p>
           <div class="action-dock"><button class="arena-action" id="reset-bout">reset position</button><button class="arena-action" data-move-id="listen">sit &amp; listen</button><button class="arena-action" data-move-id="play">play another way</button></div>
         </div>
@@ -214,7 +229,7 @@
       <div class="seed-modal hidden" id="prune-modal" role="dialog" aria-modal="true" aria-labelledby="prune-dialog-title">
         <div class="modal-card prune-card">
           <button class="close-button" id="close-prune-modal" aria-label="Close">×</button>
-          <p class="eyebrow">garden tending</p>
+          <p class="eyebrow">labyrinth tending</p>
           <h2 id="prune-dialog-title">Prune <em id="prune-name">this idea</em>?</h2>
           <p class="prune-copy"><strong id="prune-title">An unfinished thought</strong> will leave the labyrinth and the dojo. Its seed will remain safely archived for a future place to revisit it.</p>
           <div class="modal-actions prune-actions"><button class="secondary-button" id="cancel-prune">keep growing</button><button class="primary-button prune-button" id="confirm-prune">prune this tree <span>✂</span></button></div>
