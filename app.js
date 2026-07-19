@@ -2,10 +2,10 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const ideas = {
-  "tiny-libraries": { id: "tiny-libraries", name: "morrow", title: "the neighborhood of tiny libraries", seed: "A neighborhood network of tiny, welcoming libraries.", description: "A curious place to borrow a story, then leave one behind.", tone: "lilac", quip: "Take a story. Leave a secret in its place." },
-  "stranger-dinner": { id: "stranger-dinner", name: "amble", title: "a dinner party for strangers", seed: "A dinner party designed to make strangers feel unexpectedly at home.", description: "A brave table where no one has to arrive knowing anyone.", tone: "ochre", quip: "Who gets the first chair if nobody knows anyone?" },
-  "pocket-weather": { id: "pocket-weather", name: "pella", title: "the pocket weather station", seed: "A tiny weather ritual for noticing the emotional atmosphere of a day.", description: "A tiny ritual for noticing the atmosphere inside a day.", tone: "moss", quip: "Today feels cloudy with a chance of courage." },
-  "memory-map": { id: "memory-map", name: "orlo", title: "a map made of memories", seed: "A living map whose paths are made from small, personal memories.", description: "A map that changes when a small memory finds a new home.", tone: "blue", quip: "This path remembers something you forgot." },
+  "tiny-libraries": { id: "tiny-libraries", slot: 1, name: "morrow", title: "the neighborhood of tiny libraries", seed: "A neighborhood network of tiny, welcoming libraries.", description: "A curious place to borrow a story, then leave one behind.", tone: "lilac", quip: "Take a story. Leave a secret in its place." },
+  "stranger-dinner": { id: "stranger-dinner", slot: 2, name: "amble", title: "a dinner party for strangers", seed: "A dinner party designed to make strangers feel unexpectedly at home.", description: "A brave table where no one has to arrive knowing anyone.", tone: "ochre", quip: "Who gets the first chair if nobody knows anyone?" },
+  "pocket-weather": { id: "pocket-weather", slot: 3, name: "pella", title: "the pocket weather station", seed: "A tiny weather ritual for noticing the emotional atmosphere of a day.", description: "A tiny ritual for noticing the atmosphere inside a day.", tone: "moss", quip: "Today feels cloudy with a chance of courage." },
+  "memory-map": { id: "memory-map", slot: 4, name: "orlo", title: "a map made of memories", seed: "A living map whose paths are made from small, personal memories.", description: "A map that changes when a small memory finds a new home.", tone: "blue", quip: "This path remembers something you forgot." },
 };
 
 let dojoSessionId = null;
@@ -22,10 +22,16 @@ let audioContext = null;
 const QTE_TARGET = 12;
 const POSITION_KEY = 'idea-dojo.arena-positions.v1';
 const PLANTED_KEY = 'idea-dojo.planted-ideas.v1';
+const PRUNED_KEY = 'idea-dojo.pruned-ideas.v1';
 const PLANT_NAMES = ['luma', 'tavi', 'rill', 'nori', 'fable', 'sora', 'brio', 'minka', 'tillo', 'vesper', 'lilo', 'cairn'];
 const PLANT_TONES = ['lilac', 'ochre', 'moss', 'blue'];
+const GARDEN_SLOTS = [1, 2, 3, 4, 5, 6, 7];
+const SLOT_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'];
+const SLOT_DIRECTIONS = ['top', 'upper-right', 'lower-right', 'center', 'upper-left', 'lower-left', 'bottom'];
 let plantedIdeas = [];
+let prunedIdeas = [];
 let activePlantSlot = null;
+let activePruneIdea = null;
 
 function cookieValue(name) {
   const cookie = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`));
@@ -34,7 +40,7 @@ function cookieValue(name) {
 
 function normalizePlantedIdea(value) {
   const slot = Number(value?.slot);
-  if (![5, 6, 7].includes(slot) || !value?.id || !value?.seed) return null;
+  if (!GARDEN_SLOTS.includes(slot) || !value?.id || !value?.seed) return null;
   return {
     id: String(value.id).slice(0, 80),
     slot,
@@ -48,6 +54,23 @@ function normalizePlantedIdea(value) {
   };
 }
 
+function normalizePrunedIdea(value) {
+  const slot = Number(value?.slot);
+  if (![1, 2, 3, 4, 5, 6, 7].includes(slot) || !value?.id || !value?.seed) return null;
+  return {
+    id: String(value.id).slice(0, 80),
+    slot,
+    name: String(value.name || 'sprout').slice(0, 24),
+    title: String(value.title || value.seed).slice(0, 120),
+    seed: String(value.seed).slice(0, 240),
+    description: String(value.description || value.seed).slice(0, 300),
+    tone: PLANT_TONES.includes(value.tone) ? value.tone : 'moss',
+    quip: String(value.quip || 'I am still becoming. What do you notice?').slice(0, 140),
+    createdAt: String(value.createdAt || new Date().toISOString()),
+    prunedAt: String(value.prunedAt || new Date().toISOString()),
+  };
+}
+
 function readPlantedIdeas() {
   let values = [];
   try { values = JSON.parse(localStorage.getItem(PLANTED_KEY) || '[]'); }
@@ -58,13 +81,32 @@ function readPlantedIdeas() {
   }
   const bySlot = new Map();
   values.map(normalizePlantedIdea).filter(Boolean).forEach((idea) => bySlot.set(idea.slot, idea));
-  return [...bySlot.values()].slice(0, 3);
+  return [...bySlot.values()].slice(0, 7);
+}
+
+function readPrunedIdeas() {
+  let values = [];
+  try { values = JSON.parse(localStorage.getItem(PRUNED_KEY) || '[]'); }
+  catch { /* Fall through to the cookie backup. */ }
+  if (!Array.isArray(values) || !values.length) {
+    try { values = JSON.parse(cookieValue('idea_dojo_pruned') || '[]'); }
+    catch { values = []; }
+  }
+  const byId = new Map();
+  values.map(normalizePrunedIdea).filter(Boolean).forEach((idea) => byId.set(idea.id, idea));
+  return [...byId.values()];
 }
 
 function savePlantedIdeas() {
   const serialized = JSON.stringify(plantedIdeas);
   localStorage.setItem(PLANTED_KEY, serialized);
   document.cookie = `idea_dojo_planted=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
+}
+
+function savePrunedIdeas() {
+  const serialized = JSON.stringify(prunedIdeas);
+  localStorage.setItem(PRUNED_KEY, serialized);
+  document.cookie = `idea_dojo_pruned=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
 function seedHash(seed) {
@@ -101,7 +143,7 @@ function treeMarkup(tone) {
 
 function makeGardenTree(idea, animate = false) {
   const button = document.createElement('button');
-  button.className = `tree-idea tree-${['five', 'six', 'seven'][idea.slot - 5]}${animate ? ' is-new' : ''}`;
+  button.className = `tree-idea tree-${SLOT_WORDS[idea.slot - 1]}${animate ? ' is-new' : ''}`;
   button.dataset.dynamicIdea = 'true';
   button.dataset.openIdea = '';
   button.dataset.ideaId = idea.id;
@@ -115,6 +157,27 @@ function makeGardenTree(idea, animate = false) {
   title.textContent = idea.title.split(/\s+/).slice(0, 4).join(' ');
   label.append(name, title);
   button.append(label);
+  return button;
+}
+
+function makePruneControl(idea) {
+  const button = document.createElement('button');
+  button.className = `prune-control prune-${SLOT_WORDS[idea.slot - 1]}`;
+  button.dataset.pruneIdea = '';
+  button.dataset.ideaId = idea.id;
+  button.setAttribute('aria-label', `Prune ${idea.name} from the labyrinth`);
+  button.innerHTML = '<span aria-hidden="true">✂</span><small>prune</small>';
+  return button;
+}
+
+function makeSeedClearing(slot) {
+  const button = document.createElement('button');
+  button.className = `empty-grove seed-clearing grove-slot-${SLOT_WORDS[slot - 1]}`;
+  button.dataset.dynamicSeed = 'true';
+  button.dataset.newSeed = '';
+  button.dataset.slot = String(slot);
+  button.setAttribute('aria-label', `Plant a new seed in the ${SLOT_DIRECTIONS[slot - 1]} clearing`);
+  button.innerHTML = '<i><b>+</b></i><span class="seed-clearing-label">plant a new seed</span>';
   return button;
 }
 
@@ -149,22 +212,31 @@ function registerPlantedIdeas(values, animateId = '') {
   plantedIdeas.forEach(({ id }) => delete ideas[id]);
   const bySlot = new Map();
   values.map(normalizePlantedIdea).filter(Boolean).forEach((idea) => bySlot.set(idea.slot, idea));
-  plantedIdeas = [...bySlot.values()].sort((a, b) => a.slot - b.slot).slice(0, 3);
+  plantedIdeas = [...bySlot.values()].sort((a, b) => a.slot - b.slot).slice(0, 7);
   plantedIdeas.forEach((idea) => { ideas[idea.id] = idea; });
   renderPlantedIdeas(animateId);
 }
 
 function renderPlantedIdeas(animateId = '') {
   $$('[data-dynamic-idea]').forEach((element) => element.remove());
-  $$('[data-new-seed]').forEach((button) => button.classList.remove('hidden'));
+  $$('[data-dynamic-seed]').forEach((element) => element.remove());
+  $$('[data-prune-idea]').forEach((element) => element.remove());
   const maze = $('.labyrinth-map');
   const roster = $('.idea-roster');
+  const prunedIds = new Set(prunedIdeas.map(({ id }) => id));
+  $$('[data-static-idea]').forEach((element) => element.classList.toggle('hidden', prunedIds.has(element.dataset.ideaId)));
+  const occupiedSlots = new Set(Object.values(ideas)
+    .filter((idea) => !prunedIds.has(idea.id))
+    .map(({ slot }) => slot));
+  $$('[data-new-seed]').forEach((button) => button.classList.toggle('hidden', occupiedSlots.has(Number(button.dataset.slot))));
+  GARDEN_SLOTS.filter((slot) => !occupiedSlots.has(slot) && !$(`[data-new-seed][data-slot="${slot}"]`))
+    .forEach((slot) => maze.append(makeSeedClearing(slot)));
   plantedIdeas.forEach((idea) => {
-    $(`[data-new-seed][data-slot="${idea.slot}"]`)?.classList.add('hidden');
     maze.append(makeGardenTree(idea, idea.id === animateId));
     roster.append(makeRosterIdea(idea));
   });
-  const total = 4 + plantedIdeas.length;
+  Object.values(ideas).filter((idea) => !prunedIds.has(idea.id)).forEach((idea) => maze.append(makePruneControl(idea)));
+  const total = Object.values(ideas).filter((idea) => !prunedIds.has(idea.id)).length;
   $('#garden-count').textContent = `${total} of 7 ideas are growing`;
   $('#dojo-count').textContent = `${total} guests`;
   maze.setAttribute('aria-label', `A hedge labyrinth containing ${total} growing ideas and ${7 - total} places to plant a new seed`);
@@ -180,17 +252,38 @@ async function saveIdeaToServer(idea) {
   } catch { /* Client storage remains the immediate offline fallback. */ }
 }
 
+async function pruneIdeaOnServer(idea) {
+  try {
+    await fetch(`/api/ideas/${encodeURIComponent(idea.id)}/prune`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idea }),
+    });
+  } catch { /* The local archive remains the immediate offline fallback. */ }
+}
+
 async function hydrateIdeasFromServer() {
   try {
     const response = await fetch('/api/ideas');
     if (!response.ok) return;
     const payload = await response.json();
     const clientIdeas = [...plantedIdeas];
+    const clientPrunedIdeas = [...prunedIdeas];
     const merged = new Map(payload.ideas?.map((idea) => [Number(idea.slot), idea]) || []);
     clientIdeas.forEach((idea) => merged.set(idea.slot, idea));
-    registerPlantedIdeas([...merged.values()]);
+    const mergedPruned = new Map(payload.prunedIdeas?.map((idea) => [idea.id, idea]) || []);
+    clientPrunedIdeas.forEach((idea) => mergedPruned.set(idea.id, idea));
+    const activeById = new Map([...merged.values()].map((idea) => [idea.id, idea]));
+    prunedIdeas = [...mergedPruned.values()].map(normalizePrunedIdea).filter((idea) => {
+      const active = activeById.get(idea?.id);
+      return idea && (!active || new Date(active.createdAt) <= new Date(idea.prunedAt));
+    });
+    const prunedIds = new Set(prunedIdeas.map(({ id }) => id));
+    registerPlantedIdeas([...merged.values()].filter((idea) => !prunedIds.has(idea.id)));
     savePlantedIdeas();
-    clientIdeas.forEach((idea) => { void saveIdeaToServer(idea); });
+    savePrunedIdeas();
+    clientIdeas.filter((idea) => !prunedIds.has(idea.id)).forEach((idea) => { void saveIdeaToServer(idea); });
+    clientPrunedIdeas.forEach((idea) => { void pruneIdeaOnServer(idea); });
   } catch { /* The garden still works from client storage in offline mode. */ }
 }
 
@@ -576,7 +669,8 @@ function finishGrapple(won) {
 
 function handleRoute() {
   const [, root, ideaId] = window.location.pathname.split('/');
-  if (root === 'dojo' && ideaId && ideas[ideaId]) return enterArena(ideas[ideaId], false);
+  const ideaIsPruned = prunedIdeas.some(({ id }) => id === ideaId);
+  if (root === 'dojo' && ideaId && ideas[ideaId] && !ideaIsPruned) return enterArena(ideas[ideaId], false);
   if (root === 'dojo') return showView('dojo');
   return showView('garden');
 }
@@ -593,7 +687,18 @@ $('#arena-scene').addEventListener('pointercancel', releaseAim);
 
 const modal = $('#seed-modal');
 const input = $('#seed-input');
+const pruneModal = $('#prune-modal');
 document.addEventListener('click', (event) => {
+  const pruneButton = event.target.closest('[data-prune-idea]');
+  if (pruneButton) {
+    activePruneIdea = ideas[pruneButton.dataset.ideaId];
+    if (!activePruneIdea) return;
+    $('#prune-name').textContent = activePruneIdea.name;
+    $('#prune-title').textContent = activePruneIdea.title;
+    pruneModal.classList.remove('hidden');
+    setTimeout(() => $('#cancel-prune').focus(), 50);
+    return;
+  }
   const seedButton = event.target.closest('[data-new-seed]');
   if (seedButton) {
     activePlantSlot = Number(seedButton.dataset.slot);
@@ -606,19 +711,42 @@ document.addEventListener('click', (event) => {
 });
 $('#close-modal').addEventListener('click', () => modal.classList.add('hidden'));
 modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.add('hidden'); });
+function closePruneModal() {
+  pruneModal.classList.add('hidden');
+  activePruneIdea = null;
+}
+$('#close-prune-modal').addEventListener('click', closePruneModal);
+$('#cancel-prune').addEventListener('click', closePruneModal);
+pruneModal.addEventListener('click', (event) => { if (event.target === pruneModal) closePruneModal(); });
+$('#confirm-prune').addEventListener('click', () => {
+  if (!activePruneIdea) return;
+  const idea = { ...activePruneIdea, prunedAt: new Date().toISOString() };
+  const slot = idea.slot;
+  prunedIdeas = [...prunedIdeas.filter(({ id }) => id !== idea.id), idea];
+  registerPlantedIdeas(plantedIdeas.filter(({ id }) => id !== idea.id));
+  savePlantedIdeas();
+  savePrunedIdeas();
+  void pruneIdeaOnServer(idea);
+  closePruneModal();
+  requestAnimationFrame(() => $(`[data-new-seed][data-slot="${slot}"]`)?.focus());
+});
 input.addEventListener('input', () => { $('#character-count').textContent = `${input.value.length} / 240`; });
 $('#plant-button').addEventListener('click', () => {
   const seed = input.value.trim();
   if (!seed) { input.focus(); return; }
-  const occupied = new Set(plantedIdeas.map(({ slot }) => slot));
-  const slot = [activePlantSlot, 5, 6, 7].find((candidate) => [5, 6, 7].includes(candidate) && !occupied.has(candidate));
+  const occupied = new Set(Object.values(ideas)
+    .filter((idea) => !prunedIdeas.some(({ id }) => id === idea.id))
+    .map(({ slot }) => slot));
+  const slot = [activePlantSlot, ...GARDEN_SLOTS].find((candidate) => GARDEN_SLOTS.includes(candidate) && !occupied.has(candidate));
   if (!slot) {
-    $('#character-count').textContent = 'all seven clearings are growing';
+    $('#character-count').textContent = 'all seven plots are growing';
     return;
   }
   const idea = makeIdeaFromSeed(seed, slot);
+  prunedIdeas = prunedIdeas.filter(({ id }) => id !== idea.id);
   registerPlantedIdeas([...plantedIdeas, idea], idea.id);
   savePlantedIdeas();
+  savePrunedIdeas();
   void saveIdeaToServer(idea);
   modal.classList.add('hidden');
   input.value = '';
@@ -628,7 +756,10 @@ $('#plant-button').addEventListener('click', () => {
 });
 
 document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape') modal.classList.add('hidden');
+  if (event.key === 'Escape') {
+    modal.classList.add('hidden');
+    closePruneModal();
+  }
   if (event.target.matches('textarea, input')) return;
   if (event.key.toLowerCase() === 'x' && arenaState === 'qte') {
     event.preventDefault();
@@ -638,6 +769,7 @@ document.addEventListener('keydown', (event) => {
 });
 window.addEventListener('resize', () => { if (!$('#arena-view').classList.contains('hidden')) initializeBout(); });
 window.addEventListener('popstate', handleRoute);
+prunedIdeas = readPrunedIdeas();
 registerPlantedIdeas(readPlantedIdeas());
 void hydrateIdeasFromServer();
 handleRoute();
