@@ -8,6 +8,7 @@ import OpenAI from "openai";
 
 const port = Number(process.env.PORT || 8787);
 const sessions = new Map();
+let persistQueue = Promise.resolve();
 const serverDirectory = path.dirname(fileURLToPath(import.meta.url));
 const ideasFile = process.env.IDEA_DOJO_DATA_FILE || path.join(serverDirectory, "data", "ideas.json");
 const model = process.env.OPENAI_MODEL;
@@ -15,7 +16,7 @@ const client = process.env.OPENAI_API_KEY && model ? new OpenAI({ apiKey: proces
 
 function normalizeIdea(value) {
   const slot = Number(value?.slot);
-  if (![5, 6, 7].includes(slot) || !value?.id || !value?.seed) return null;
+  if (![1, 2, 3, 4, 5, 6, 7].includes(slot) || !value?.id || !value?.seed) return null;
   return {
     id: String(value.id).slice(0, 80),
     slot,
@@ -29,25 +30,38 @@ function normalizeIdea(value) {
   };
 }
 
+function normalizePrunedIdea(value) {
+  const idea = normalizeIdea(value);
+  return idea ? { ...idea, prunedAt: String(value.prunedAt || new Date().toISOString()) } : null;
+}
+
 async function loadIdeas() {
   try {
-    const values = JSON.parse(await readFile(ideasFile, "utf8"));
-    const bySlot = new Map();
-    values.map(normalizeIdea).filter(Boolean).forEach((idea) => bySlot.set(idea.slot, idea));
-    return bySlot;
+    const stored = JSON.parse(await readFile(ideasFile, "utf8"));
+    const activeValues = Array.isArray(stored) ? stored : stored.active;
+    const prunedValues = Array.isArray(stored) ? [] : stored.pruned;
+    const active = new Map();
+    const pruned = new Map();
+    (activeValues || []).map(normalizeIdea).filter(Boolean).forEach((idea) => active.set(idea.slot, idea));
+    (prunedValues || []).map(normalizePrunedIdea).filter(Boolean).forEach((idea) => pruned.set(idea.id, idea));
+    return { active, pruned };
   } catch (error) {
     if (error?.code !== "ENOENT") console.warn("Unable to load planted ideas.", error.message);
-    return new Map();
+    return { active: new Map(), pruned: new Map() };
   }
 }
 
-const plantedIdeas = await loadIdeas();
+const { active: plantedIdeas, pruned: prunedIdeas } = await loadIdeas();
 
-async function persistIdeas() {
-  await mkdir(path.dirname(ideasFile), { recursive: true });
-  const temporaryFile = `${ideasFile}.tmp`;
-  await writeFile(temporaryFile, `${JSON.stringify([...plantedIdeas.values()], null, 2)}\n`, "utf8");
-  await rename(temporaryFile, ideasFile);
+function persistIdeas() {
+  const garden = { active: [...plantedIdeas.values()], pruned: [...prunedIdeas.values()] };
+  persistQueue = persistQueue.catch(() => {}).then(async () => {
+    await mkdir(path.dirname(ideasFile), { recursive: true });
+    const temporaryFile = `${ideasFile}.tmp`;
+    await writeFile(temporaryFile, `${JSON.stringify(garden, null, 2)}\n`, "utf8");
+    await rename(temporaryFile, ideasFile);
+  });
+  return persistQueue;
 }
 
 const senseis = [
@@ -152,7 +166,7 @@ async function handle(request, response) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/ideas") {
-    return sendJson(response, 200, { ideas: [...plantedIdeas.values()] });
+    return sendJson(response, 200, { ideas: [...plantedIdeas.values()], prunedIdeas: [...prunedIdeas.values()] });
   }
 
   if (request.method === "POST" && url.pathname === "/api/ideas") {
@@ -161,9 +175,24 @@ async function handle(request, response) {
     if (!idea) return sendJson(response, 400, { error: "A planted idea needs a seed and an open clearing." });
     const occupant = plantedIdeas.get(idea.slot);
     if (occupant && occupant.id !== idea.id) return sendJson(response, 409, { error: "That clearing is already growing an idea." });
+    prunedIdeas.delete(idea.id);
     plantedIdeas.set(idea.slot, idea);
     await persistIdeas();
     return sendJson(response, occupant ? 200 : 201, { idea });
+  }
+
+  const pruneMatch = url.pathname.match(/^\/api\/ideas\/([^/]+)\/prune$/);
+  if (request.method === "POST" && pruneMatch) {
+    const ideaId = decodeURIComponent(pruneMatch[1]);
+    const body = await readJson(request);
+    const plantedIdea = [...plantedIdeas.values()].find(({ id }) => id === ideaId);
+    const idea = plantedIdea || normalizeIdea(body.idea);
+    if (!idea || idea.id !== ideaId) return sendJson(response, 404, { error: "That idea is not growing in this garden." });
+    if (plantedIdea) plantedIdeas.delete(plantedIdea.slot);
+    const prunedIdea = normalizePrunedIdea({ ...idea, prunedAt: body.idea?.prunedAt });
+    prunedIdeas.set(prunedIdea.id, prunedIdea);
+    await persistIdeas();
+    return sendJson(response, 200, { idea: prunedIdea });
   }
 
   if (request.method === "POST" && url.pathname === "/api/dojo/sessions") {

@@ -50,13 +50,15 @@
                 <circle id="maze-middle" cx="380" cy="380" r="286" />
                 <circle id="maze-inner" cx="380" cy="380" r="151" />
                 <circle id="maze-heart" cx="380" cy="380" r="110" />
-                <path id="maze-radials" d="M523 132 L455 249 M666 380 L531 380 M523 628 L455 511 M237 628 L305 511 M94 380 L229 380 M237 132 L305 249" />
-                <path id="maze-bridges" d="M547 91 L523 132 M715 380 L666 380 M547 669 L523 628 M213 669 L237 628 M45 380 L94 380 M213 91 L237 132 M380 229 L380 270 M511 304 L475 325 M249 456 L285 435" />
+                <path id="slot-two-left-hedge" d="M468.39 225.58 A151 151 0 0 1 500.59 257.13" />
+                <path id="maze-radials" d="M523 132 L496 178 M666 380 L550 380 M523 628 L496 582 M237 628 L264 582 M94 380 L210 380 M237 132 L264 178" />
+                <path id="maze-bridges" d="M547 91 L523 132 M715 380 L666 380 M547 669 L523 628 M213 669 L237 628 M45 380 L94 380 M213 91 L237 132 M380 229 L380 270" />
               </defs>
               <g class="maze-shadow-layer">
                 <use href="#maze-outer" class="ring-outer" />
                 <use href="#maze-middle" class="ring-middle" />
                 <use href="#maze-inner" class="ring-inner" />
+                <use href="#slot-two-left-hedge" class="slot-two-left-hedge" />
                 <use href="#maze-heart" class="ring-heart" />
                 <use href="#maze-radials" /><use href="#maze-bridges" />
               </g>
@@ -64,6 +66,7 @@
                 <use href="#maze-outer" class="ring-outer" />
                 <use href="#maze-middle" class="ring-middle" />
                 <use href="#maze-inner" class="ring-inner" />
+                <use href="#slot-two-left-hedge" class="slot-two-left-hedge" />
                 <use href="#maze-heart" class="ring-heart" />
                 <use href="#maze-radials" /><use href="#maze-bridges" />
               </g>
@@ -71,6 +74,7 @@
                 <use href="#maze-outer" class="ring-outer" />
                 <use href="#maze-middle" class="ring-middle" />
                 <use href="#maze-inner" class="ring-inner" />
+                <use href="#slot-two-left-hedge" class="slot-two-left-hedge" />
                 <use href="#maze-heart" class="ring-heart" />
                 <use href="#maze-radials" /><use href="#maze-bridges" />
               </g>
@@ -81,7 +85,7 @@
             <span class="garden-flower flower-one" aria-hidden="true">✣</span>
             <span class="garden-flower flower-two" aria-hidden="true">·</span>
 
-            <button class="tree-idea tree-one" data-open-idea data-idea-id="tiny-libraries" data-idea-title="the neighborhood of tiny libraries" data-idea-seed="A neighborhood network of tiny, welcoming libraries." aria-label="Open the neighborhood of tiny libraries">
+            <button class="tree-idea tree-one" data-static-idea data-open-idea data-idea-id="tiny-libraries" data-idea-title="the neighborhood of tiny libraries" data-idea-seed="A neighborhood network of tiny, welcoming libraries." aria-label="Open the neighborhood of tiny libraries">
               <span class="tree-creature tree-lilac" aria-hidden="true">
                 <i class="branch branch-left"></i><i class="branch branch-right"></i>
                 <span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span>
@@ -90,7 +94,7 @@
               <span class="tree-label"><strong>morrow</strong><small>tiny libraries</small></span>
             </button>
 
-            <button class="tree-idea tree-two" data-open-idea data-idea-id="stranger-dinner" data-idea-title="a dinner party for strangers" data-idea-seed="A dinner party designed to make strangers feel unexpectedly at home." aria-label="Open a dinner party for strangers">
+            <button class="tree-idea tree-two" data-static-idea data-open-idea data-idea-id="stranger-dinner" data-idea-title="a dinner party for strangers" data-idea-seed="A dinner party designed to make strangers feel unexpectedly at home." aria-label="Open a dinner party for strangers">
               <span class="tree-creature tree-ochre" aria-hidden="true">
                 <i class="branch branch-left"></i><i class="branch branch-right"></i>
                 <span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span>
@@ -99,7 +103,7 @@
               <span class="tree-label"><strong>amble</strong><small>dinner for strangers</small></span>
             </button>
 
-            <button class="tree-idea tree-three" data-open-idea data-idea-id="pocket-weather" data-idea-title="the pocket weather station" data-idea-seed="A tiny weather ritual for noticing the emotional atmosphere of a day." aria-label="Open the pocket weather station">
+            <button class="tree-idea tree-three" data-static-idea data-open-idea data-idea-id="pocket-weather" data-idea-title="the pocket weather station" data-idea-seed="A tiny weather ritual for noticing the emotional atmosphere of a day." aria-label="Open the pocket weather station">
               <span class="tree-creature tree-moss" aria-hidden="true">
                 <i class="branch branch-left"></i><i class="branch branch-right"></i>
                 <span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span>
@@ -108,7 +112,7 @@
               <span class="tree-label"><strong>pella</strong><small>pocket weather</small></span>
             </button>
 
-            <button class="tree-idea tree-four tree-center" data-open-idea data-idea-id="memory-map" data-idea-title="a map made of memories" data-idea-seed="A living map whose paths are made from small, personal memories." aria-label="Open a map made of memories">
+            <button class="tree-idea tree-four tree-center" data-static-idea data-open-idea data-idea-id="memory-map" data-idea-title="a map made of memories" data-idea-seed="A living map whose paths are made from small, personal memories." aria-label="Open a map made of memories">
               <span class="tree-creature tree-blue" aria-hidden="true">
                 <i class="branch branch-left"></i><i class="branch branch-right"></i>
                 <span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span>
@@ -117,9 +121,9 @@
               <span class="tree-label"><strong>orlo</strong><small>a map of memories</small></span>
             </button>
 
-            <button class="empty-grove seed-clearing grove-one" data-new-seed data-slot="5" aria-label="Plant a new seed in the upper-left clearing"><i><b>+</b></i><small>plant a new seed</small></button>
-            <button class="empty-grove seed-clearing grove-two" data-new-seed data-slot="6" aria-label="Plant a new seed in the lower-left clearing"><i><b>+</b></i><small>plant a new seed</small></button>
-            <button class="empty-grove seed-clearing grove-three" data-new-seed data-slot="7" aria-label="Plant a new seed in the lower clearing"><i><b>+</b></i><small>plant a new seed</small></button>
+            <button class="empty-grove seed-clearing grove-slot-five" data-new-seed data-slot="5" aria-label="Plant a new seed in the upper-left clearing"><i><b>+</b></i><span class="seed-clearing-label">plant a new seed</span></button>
+            <button class="empty-grove seed-clearing grove-slot-six" data-new-seed data-slot="6" aria-label="Plant a new seed in the lower-left clearing"><i><b>+</b></i><span class="seed-clearing-label">plant a new seed</span></button>
+            <button class="empty-grove seed-clearing grove-slot-seven" data-new-seed data-slot="7" aria-label="Plant a new seed in the bottom clearing"><i><b>+</b></i><span class="seed-clearing-label">plant a new seed</span></button>
 
           </div>
         </div>
@@ -140,19 +144,19 @@
         <div class="dojo-intro"><p>Choose an idea to meet on the mat.</p><span>No score. No outcome required.</span></div>
 
         <div class="idea-roster" aria-label="Ideas ready for the dojo">
-          <button class="roster-idea" data-enter-dojo data-idea-id="tiny-libraries" data-idea-title="the neighborhood of tiny libraries" data-idea-name="morrow" data-idea-seed="A neighborhood network of tiny, welcoming libraries." data-idea-tone="lilac">
+          <button class="roster-idea" data-static-idea data-enter-dojo data-idea-id="tiny-libraries" data-idea-title="the neighborhood of tiny libraries" data-idea-name="morrow" data-idea-seed="A neighborhood network of tiny, welcoming libraries." data-idea-tone="lilac">
             <span class="roster-creature"><span class="tree-creature tree-lilac"><i class="branch branch-left"></i><i class="branch branch-right"></i><span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span><span class="tree-trunk"></span></span></span>
             <span class="roster-copy"><small>resting · 2 days</small><strong>morrow</strong><span>tiny libraries</span><em>A curious place to borrow a story, then leave one behind.</em></span><span class="roster-arrow">↗</span>
           </button>
-          <button class="roster-idea" data-enter-dojo data-idea-id="stranger-dinner" data-idea-title="a dinner party for strangers" data-idea-name="amble" data-idea-seed="A dinner party designed to make strangers feel unexpectedly at home." data-idea-tone="ochre">
+          <button class="roster-idea" data-static-idea data-enter-dojo data-idea-id="stranger-dinner" data-idea-title="a dinner party for strangers" data-idea-name="amble" data-idea-seed="A dinner party designed to make strangers feel unexpectedly at home." data-idea-tone="ochre">
             <span class="roster-creature"><span class="tree-creature tree-ochre"><i class="branch branch-left"></i><i class="branch branch-right"></i><span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span><span class="tree-trunk"></span></span></span>
             <span class="roster-copy"><small>visited today</small><strong>amble</strong><span>dinner for strangers</span><em>A brave table where no one has to arrive knowing anyone.</em></span><span class="roster-arrow">↗</span>
           </button>
-          <button class="roster-idea" data-enter-dojo data-idea-id="pocket-weather" data-idea-title="the pocket weather station" data-idea-name="pella" data-idea-seed="A tiny weather ritual for noticing the emotional atmosphere of a day." data-idea-tone="moss">
+          <button class="roster-idea" data-static-idea data-enter-dojo data-idea-id="pocket-weather" data-idea-title="the pocket weather station" data-idea-name="pella" data-idea-seed="A tiny weather ritual for noticing the emotional atmosphere of a day." data-idea-tone="moss">
             <span class="roster-creature"><span class="tree-creature tree-moss"><i class="branch branch-left"></i><i class="branch branch-right"></i><span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span><span class="tree-trunk"></span></span></span>
             <span class="roster-copy"><small>dreaming</small><strong>pella</strong><span>pocket weather</span><em>A tiny ritual for noticing the atmosphere inside a day.</em></span><span class="roster-arrow">↗</span>
           </button>
-          <button class="roster-idea" data-enter-dojo data-idea-id="memory-map" data-idea-title="a map made of memories" data-idea-name="orlo" data-idea-seed="A living map whose paths are made from small, personal memories." data-idea-tone="blue">
+          <button class="roster-idea" data-static-idea data-enter-dojo data-idea-id="memory-map" data-idea-title="a map made of memories" data-idea-name="orlo" data-idea-seed="A living map whose paths are made from small, personal memories." data-idea-tone="blue">
             <span class="roster-creature"><span class="tree-creature tree-blue"><i class="branch branch-left"></i><i class="branch branch-right"></i><span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span><span class="tree-trunk"></span></span></span>
             <span class="roster-copy"><small>resting · 5 days</small><strong>orlo</strong><span>a map of memories</span><em>A map that changes when a small memory finds a new home.</em></span><span class="roster-arrow">↗</span>
           </button>
@@ -205,6 +209,15 @@
           <h2 id="seed-title">Give it somewhere<br /><em>to begin.</em></h2>
           <textarea id="seed-input" placeholder="An idea, a question, a strange little hunch..." maxlength="240"></textarea>
           <div class="modal-actions"><span id="character-count">0 / 240</span><button class="primary-button" id="plant-button">plant the seed <span>→</span></button></div>
+        </div>
+      </div>
+      <div class="seed-modal hidden" id="prune-modal" role="dialog" aria-modal="true" aria-labelledby="prune-dialog-title">
+        <div class="modal-card prune-card">
+          <button class="close-button" id="close-prune-modal" aria-label="Close">×</button>
+          <p class="eyebrow">garden tending</p>
+          <h2 id="prune-dialog-title">Prune <em id="prune-name">this idea</em>?</h2>
+          <p class="prune-copy"><strong id="prune-title">An unfinished thought</strong> will leave the labyrinth and the dojo. Its seed will remain safely archived for a future place to revisit it.</p>
+          <div class="modal-actions prune-actions"><button class="secondary-button" id="cancel-prune">keep growing</button><button class="primary-button prune-button" id="confirm-prune">prune this tree <span>✂</span></button></div>
         </div>
       </div>
     </main>
