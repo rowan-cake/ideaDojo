@@ -31,7 +31,6 @@
         </div>
 
         <div class="labyrinth-heading">
-          <span>your idea labyrinth</span>
           <span>seven fixed clearings · ideas grow where planted</span>
         </div>
 
@@ -118,17 +117,15 @@
               <span class="tree-label"><strong>orlo</strong><small>a map of memories</small></span>
             </button>
 
-            <span class="empty-grove grove-one"><i></i><small>an open clearing</small></span>
-            <span class="empty-grove grove-two"><i></i><small>an open clearing</small></span>
-            <button class="empty-grove seed-clearing grove-three" data-new-seed aria-label="Plant a new seed in this clearing">
-              <i><b>+</b></i><small>plant a new seed</small><em>something half-formed is welcome</em>
-            </button>
+            <button class="empty-grove seed-clearing grove-one" data-new-seed data-slot="5" aria-label="Plant a new seed in the upper-left clearing"><i><b>+</b></i><small>plant a new seed</small></button>
+            <button class="empty-grove seed-clearing grove-two" data-new-seed data-slot="6" aria-label="Plant a new seed in the lower-left clearing"><i><b>+</b></i><small>plant a new seed</small></button>
+            <button class="empty-grove seed-clearing grove-three" data-new-seed data-slot="7" aria-label="Plant a new seed in the lower clearing"><i><b>+</b></i><small>plant a new seed</small></button>
 
           </div>
         </div>
 
         <div class="garden-footer">
-          <span><span class="pulse"></span> 4 of 7 ideas are growing</span>
+          <span><span class="pulse"></span> <span id="garden-count">4 of 7 ideas are growing</span></span>
           <span class="footer-motto">give the idea room to grow</span>
         </div>
       </section>
@@ -137,7 +134,7 @@
         <div class="dojo-header">
           <button class="back-button" data-route="garden">← garden</button>
           <div class="dojo-title"><span class="eyebrow">choose what meets you</span><h2>the dojo</h2></div>
-          <span class="round-count">4 guests</span>
+          <span class="round-count" id="dojo-count">4 guests</span>
         </div>
 
         <div class="dojo-intro"><p>Choose an idea to meet on the mat.</p><span>No score. No outcome required.</span></div>

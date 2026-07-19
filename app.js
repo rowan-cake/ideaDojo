@@ -21,6 +21,178 @@ let qteCount = 0;
 let audioContext = null;
 const QTE_TARGET = 12;
 const POSITION_KEY = 'idea-dojo.arena-positions.v1';
+const PLANTED_KEY = 'idea-dojo.planted-ideas.v1';
+const PLANT_NAMES = ['luma', 'tavi', 'rill', 'nori', 'fable', 'sora', 'brio', 'minka', 'tillo', 'vesper', 'lilo', 'cairn'];
+const PLANT_TONES = ['lilac', 'ochre', 'moss', 'blue'];
+let plantedIdeas = [];
+let activePlantSlot = null;
+
+function cookieValue(name) {
+  const cookie = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`));
+  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
+}
+
+function normalizePlantedIdea(value) {
+  const slot = Number(value?.slot);
+  if (![5, 6, 7].includes(slot) || !value?.id || !value?.seed) return null;
+  return {
+    id: String(value.id).slice(0, 80),
+    slot,
+    name: String(value.name || 'sprout').slice(0, 24),
+    title: String(value.title || value.seed).slice(0, 120),
+    seed: String(value.seed).slice(0, 240),
+    description: String(value.description || value.seed).slice(0, 300),
+    tone: PLANT_TONES.includes(value.tone) ? value.tone : 'moss',
+    quip: String(value.quip || 'I am still becoming. What do you notice?').slice(0, 140),
+    createdAt: String(value.createdAt || new Date().toISOString()),
+  };
+}
+
+function readPlantedIdeas() {
+  let values = [];
+  try { values = JSON.parse(localStorage.getItem(PLANTED_KEY) || '[]'); }
+  catch { /* Fall through to the cookie backup. */ }
+  if (!Array.isArray(values) || !values.length) {
+    try { values = JSON.parse(cookieValue('idea_dojo_planted') || '[]'); }
+    catch { values = []; }
+  }
+  const bySlot = new Map();
+  values.map(normalizePlantedIdea).filter(Boolean).forEach((idea) => bySlot.set(idea.slot, idea));
+  return [...bySlot.values()].slice(0, 3);
+}
+
+function savePlantedIdeas() {
+  const serialized = JSON.stringify(plantedIdeas);
+  localStorage.setItem(PLANTED_KEY, serialized);
+  document.cookie = `idea_dojo_planted=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
+}
+
+function seedHash(seed) {
+  return [...seed].reduce((hash, character) => ((hash << 5) - hash + character.charCodeAt(0)) | 0, 0) >>> 0;
+}
+
+function makeIdeaFromSeed(seed, slot) {
+  const cleanSeed = seed.replace(/\s+/g, ' ').trim();
+  const hash = seedHash(cleanSeed);
+  const usedNames = new Set(Object.values(ideas).map(({ name }) => name));
+  let nameIndex = hash % PLANT_NAMES.length;
+  while (usedNames.has(PLANT_NAMES[nameIndex])) nameIndex = (nameIndex + 1) % PLANT_NAMES.length;
+  const title = cleanSeed.replace(/[.!?]+$/, '').slice(0, 90);
+  return {
+    id: `seed-${slot}-${hash.toString(36)}`,
+    slot,
+    name: PLANT_NAMES[nameIndex],
+    title,
+    seed: cleanSeed,
+    description: cleanSeed,
+    tone: PLANT_TONES[(hash + slot) % PLANT_TONES.length],
+    quip: `I began as “${cleanSeed.slice(0, 72)}${cleanSeed.length > 72 ? '…' : ''}”`,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function treeMarkup(tone) {
+  const creature = document.createElement('span');
+  creature.className = `tree-creature tree-${tone}`;
+  creature.setAttribute('aria-hidden', 'true');
+  creature.innerHTML = '<i class="branch branch-left"></i><i class="branch branch-right"></i><span class="tree-crown"><b class="tree-eye left"></b><b class="tree-eye right"></b><em></em></span><span class="tree-trunk"></span>';
+  return creature;
+}
+
+function makeGardenTree(idea, animate = false) {
+  const button = document.createElement('button');
+  button.className = `tree-idea tree-${['five', 'six', 'seven'][idea.slot - 5]}${animate ? ' is-new' : ''}`;
+  button.dataset.dynamicIdea = 'true';
+  button.dataset.openIdea = '';
+  button.dataset.ideaId = idea.id;
+  button.setAttribute('aria-label', `Open ${idea.title}`);
+  button.append(treeMarkup(idea.tone));
+  const label = document.createElement('span');
+  label.className = 'tree-label';
+  const name = document.createElement('strong');
+  name.textContent = idea.name;
+  const title = document.createElement('small');
+  title.textContent = idea.title.split(/\s+/).slice(0, 4).join(' ');
+  label.append(name, title);
+  button.append(label);
+  return button;
+}
+
+function makeRosterIdea(idea) {
+  const button = document.createElement('button');
+  button.className = 'roster-idea';
+  button.dataset.dynamicIdea = 'true';
+  button.dataset.enterDojo = '';
+  button.dataset.ideaId = idea.id;
+  const creatureWrap = document.createElement('span');
+  creatureWrap.className = 'roster-creature';
+  creatureWrap.append(treeMarkup(idea.tone));
+  const copy = document.createElement('span');
+  copy.className = 'roster-copy';
+  const status = document.createElement('small');
+  status.textContent = 'newly planted';
+  const name = document.createElement('strong');
+  name.textContent = idea.name;
+  const title = document.createElement('span');
+  title.textContent = idea.title;
+  const description = document.createElement('em');
+  description.textContent = idea.description;
+  copy.append(status, name, title, description);
+  const arrow = document.createElement('span');
+  arrow.className = 'roster-arrow';
+  arrow.textContent = '↗';
+  button.append(creatureWrap, copy, arrow);
+  return button;
+}
+
+function registerPlantedIdeas(values, animateId = '') {
+  plantedIdeas.forEach(({ id }) => delete ideas[id]);
+  const bySlot = new Map();
+  values.map(normalizePlantedIdea).filter(Boolean).forEach((idea) => bySlot.set(idea.slot, idea));
+  plantedIdeas = [...bySlot.values()].sort((a, b) => a.slot - b.slot).slice(0, 3);
+  plantedIdeas.forEach((idea) => { ideas[idea.id] = idea; });
+  renderPlantedIdeas(animateId);
+}
+
+function renderPlantedIdeas(animateId = '') {
+  $$('[data-dynamic-idea]').forEach((element) => element.remove());
+  $$('[data-new-seed]').forEach((button) => button.classList.remove('hidden'));
+  const maze = $('.labyrinth-map');
+  const roster = $('.idea-roster');
+  plantedIdeas.forEach((idea) => {
+    $(`[data-new-seed][data-slot="${idea.slot}"]`)?.classList.add('hidden');
+    maze.append(makeGardenTree(idea, idea.id === animateId));
+    roster.append(makeRosterIdea(idea));
+  });
+  const total = 4 + plantedIdeas.length;
+  $('#garden-count').textContent = `${total} of 7 ideas are growing`;
+  $('#dojo-count').textContent = `${total} guests`;
+  maze.setAttribute('aria-label', `A hedge labyrinth containing ${total} growing ideas and ${7 - total} places to plant a new seed`);
+}
+
+async function saveIdeaToServer(idea) {
+  try {
+    await fetch('/api/ideas', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ idea }),
+    });
+  } catch { /* Client storage remains the immediate offline fallback. */ }
+}
+
+async function hydrateIdeasFromServer() {
+  try {
+    const response = await fetch('/api/ideas');
+    if (!response.ok) return;
+    const payload = await response.json();
+    const clientIdeas = [...plantedIdeas];
+    const merged = new Map(payload.ideas?.map((idea) => [Number(idea.slot), idea]) || []);
+    clientIdeas.forEach((idea) => merged.set(idea.slot, idea));
+    registerPlantedIdeas([...merged.values()]);
+    savePlantedIdeas();
+    clientIdeas.forEach((idea) => { void saveIdeaToServer(idea); });
+  } catch { /* The garden still works from client storage in offline mode. */ }
+}
 
 function showView(view) {
   $$('[data-view-panel]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.viewPanel !== view));
@@ -411,7 +583,6 @@ function handleRoute() {
 
 $$('[data-route]').forEach((button) => button.addEventListener('click', () => routeTo(button.dataset.route)));
 $$('[data-view]').forEach((button) => button.addEventListener('click', () => routeTo(button.dataset.view)));
-$$('[data-open-idea], [data-enter-dojo]').forEach((element) => element.addEventListener('click', () => enterArena(ideaFromElement(element))));
 $$('.arena-action[data-move-id]').forEach((button) => button.addEventListener('click', () => takeMove(button.dataset.moveId)));
 $('#reset-bout').addEventListener('click', resetBout);
 $('#qte-button').addEventListener('click', pressGrapple);
@@ -422,16 +593,38 @@ $('#arena-scene').addEventListener('pointercancel', releaseAim);
 
 const modal = $('#seed-modal');
 const input = $('#seed-input');
-$$('[data-new-seed]').forEach((button) => button.addEventListener('click', () => { modal.classList.remove('hidden'); setTimeout(() => input.focus(), 50); }));
+document.addEventListener('click', (event) => {
+  const seedButton = event.target.closest('[data-new-seed]');
+  if (seedButton) {
+    activePlantSlot = Number(seedButton.dataset.slot);
+    modal.classList.remove('hidden');
+    setTimeout(() => input.focus(), 50);
+    return;
+  }
+  const ideaButton = event.target.closest('[data-open-idea], [data-enter-dojo]');
+  if (ideaButton) enterArena(ideaFromElement(ideaButton));
+});
 $('#close-modal').addEventListener('click', () => modal.classList.add('hidden'));
 modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.add('hidden'); });
 input.addEventListener('input', () => { $('#character-count').textContent = `${input.value.length} / 240`; });
 $('#plant-button').addEventListener('click', () => {
-  if (!input.value.trim()) { input.focus(); return; }
+  const seed = input.value.trim();
+  if (!seed) { input.focus(); return; }
+  const occupied = new Set(plantedIdeas.map(({ slot }) => slot));
+  const slot = [activePlantSlot, 5, 6, 7].find((candidate) => [5, 6, 7].includes(candidate) && !occupied.has(candidate));
+  if (!slot) {
+    $('#character-count').textContent = 'all seven clearings are growing';
+    return;
+  }
+  const idea = makeIdeaFromSeed(seed, slot);
+  registerPlantedIdeas([...plantedIdeas, idea], idea.id);
+  savePlantedIdeas();
+  void saveIdeaToServer(idea);
   modal.classList.add('hidden');
   input.value = '';
   $('#character-count').textContent = '0 / 240';
-  routeTo('dojo');
+  activePlantSlot = null;
+  requestAnimationFrame(() => $(`[data-dynamic-idea][data-idea-id="${idea.id}"]`)?.focus());
 });
 
 document.addEventListener('keydown', (event) => {
@@ -445,4 +638,6 @@ document.addEventListener('keydown', (event) => {
 });
 window.addEventListener('resize', () => { if (!$('#arena-view').classList.contains('hidden')) initializeBout(); });
 window.addEventListener('popstate', handleRoute);
+registerPlantedIdeas(readPlantedIdeas());
+void hydrateIdeasFromServer();
 handleRoute();
