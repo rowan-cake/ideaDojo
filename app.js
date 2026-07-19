@@ -384,9 +384,6 @@ function setArenaIdea(idea) {
 function updateDojo(response) {
   const nudge = response.nudge;
   const line = nudge?.text || response.beat;
-  $('#dojo-presence').textContent = nudge ? `${nudge.sensei} enters quietly` : 'the idea shifts its weight';
-  $('#idea-question').textContent = `“${line}”`;
-  $('#dojo-beat').textContent = nudge ? response.beat : 'Keep it playful. There is no right sequence.';
   typeIdeaSpeech(line);
 }
 
@@ -406,11 +403,7 @@ async function startDojoSession(idea = activeIdea) {
     if (currentScreen !== 'encounter' || activeIdea?.id !== requestedIdeaId) return;
     dojoSessionId = session.sessionId;
     updateDojo(session);
-  } catch {
-    if (currentScreen !== 'encounter' || activeIdea?.id !== requestedIdeaId) return;
-    $('#dojo-presence').textContent = 'the mat is quiet';
-    $('#idea-question').textContent = '“Make one small move.”';
-  }
+  } catch { /* The encounter remains playable when the dojo API is offline. */ }
 }
 
 function activateEncounter(idea) {
@@ -438,9 +431,7 @@ async function takeMove(moveId) {
     });
     if (!response.ok) throw new Error('The mat is quiet.');
     updateDojo(await response.json());
-  } catch {
-    $('#dojo-beat').textContent = 'The dojo is quiet for a moment. Try another small move.';
-  }
+  } catch { /* Keep the local encounter moving when a dojo move cannot be saved. */ }
 }
 
 function placePlayer(x, y) {
@@ -483,7 +474,7 @@ function savePositions() {
   scene.dataset.positionSaved = activeIdea.id;
 }
 
-function initializeBout(forceDefaults = false) {
+function initializeBout() {
   const scene = $('#arena-scene');
   if (!scene.offsetWidth || !activeIdea || currentScreen !== 'encounter') return;
   arenaState = 'idle';
@@ -492,17 +483,11 @@ function initializeBout(forceDefaults = false) {
   scene.classList.remove('is-aiming', 'is-launching', 'is-grappling', 'is-miss', 'qte-active', 'is-victory');
   $('#arena-tree').classList.remove('is-taken-down');
   $('#aim-line').style.width = '0px';
-  const saved = forceDefaults ? null : readSavedPositions()[activeIdea.id];
+  const saved = readSavedPositions()[activeIdea.id];
   scene.dataset.positionSource = saved ? 'saved' : 'default';
   placePlayer(scene.clientWidth * (saved?.player?.x ?? .22), scene.clientHeight * (saved?.player?.y ?? .62));
   placeIdea(scene.clientWidth * (saved?.idea?.x ?? .71), scene.clientHeight * (saved?.idea?.y ?? .47));
-  if (forceDefaults) savePositions();
   scheduleIdeaWander();
-}
-
-function resetBout() {
-  initializeBout(true);
-  typeIdeaSpeech('Back to our corners. Try another angle.');
 }
 
 function scheduleIdeaWander() {
@@ -611,7 +596,6 @@ function releaseAim(event) {
   $('#aim-line').style.width = '0px';
   if (aimVector.power < 18) {
     arenaState = 'idle';
-    $('#dojo-beat').textContent = 'A tiny feint. Drag farther to build a little momentum.';
     return;
   }
   launchPlayer(aimVector);
@@ -661,9 +645,6 @@ function startGrapple(target) {
   $('#qte-count').textContent = `0 / ${QTE_TARGET}`;
   $('#qte-progress').style.width = '0%';
   $('#grapple-qte').classList.remove('hidden');
-  $('#dojo-presence').textContent = `${activeIdea.name} catches your momentum`;
-  $('#idea-question').textContent = '“The idea is pushing back—grapple with it!”';
-  $('#dojo-beat').textContent = 'Press X or tap rapidly before it wriggles free.';
   typeIdeaSpeech('You caught me. Now hold on!');
   playBlip('hit');
   const endsAt = performance.now() + 4000;
@@ -680,9 +661,6 @@ function missIdea() {
   arenaState = 'recovering';
   scene.classList.remove('is-launching');
   scene.classList.add('is-miss');
-  $('#dojo-presence').textContent = 'you slide past';
-  $('#idea-question').textContent = '“Misses count. What did you notice on the way by?”';
-  $('#dojo-beat').textContent = 'The mat gives you the idea back at a slightly different angle.';
   typeIdeaSpeech('Almost. I am still over here.');
   savePositions();
   setTimeout(() => {
@@ -714,9 +692,6 @@ function finishGrapple(won) {
     arenaState = 'victory';
     scene.classList.add('is-grappling', 'is-victory');
     $('#arena-tree').classList.add('is-taken-down');
-    $('#dojo-presence').textContent = 'takedown — the idea yields';
-    $('#idea-question').textContent = '“Aha. Something surprising shook loose.”';
-    $('#dojo-beat').textContent = 'You did not solve the idea. You changed your relationship to it.';
     typeIdeaSpeech('Okay, okay! Here is what I was protecting...');
     playBlip('win');
     takeMove('grapple');
@@ -728,9 +703,6 @@ function finishGrapple(won) {
     }, 1500);
   } else {
     arenaState = 'recovering';
-    $('#dojo-presence').textContent = `${activeIdea.name} slips away`;
-    $('#idea-question').textContent = '“Not yet. Try meeting me from another angle.”';
-    $('#dojo-beat').textContent = 'The idea scampers across the mat, still very much alive.';
     typeIdeaSpeech('Too slow! Catch me again.');
     playBlip('fail');
     wanderIdea(true);
@@ -762,8 +734,6 @@ document.addEventListener('click', (event) => {
   event.preventDefault();
   navigateTo(routeLink.dataset.routeTo);
 });
-$$('.arena-action[data-move-id]').forEach((button) => button.addEventListener('click', () => takeMove(button.dataset.moveId)));
-$('#reset-bout').addEventListener('click', resetBout);
 $('#qte-button').addEventListener('click', pressGrapple);
 $('#arena-scene').addEventListener('pointerdown', beginAim);
 $('#arena-scene').addEventListener('pointermove', moveAim);
@@ -881,7 +851,6 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     pressGrapple();
   }
-  if (event.key.toLowerCase() === 'r' && currentScreen === 'encounter') resetBout();
 });
 window.addEventListener('resize', () => {
   if (currentScreen === 'encounter') initializeBout();
