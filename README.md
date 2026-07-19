@@ -11,6 +11,15 @@ npm run dev
 
 The app starts a Vite client and the local dojo API together. Visit `http://127.0.0.1:5173`.
 
+## Application routes
+
+- `/` and `/dojo` — the empty dojo mat
+- `/dojo/ideas` — the roster of ideas ready to be invited
+- `/dojo/:ideaId` — an active encounter with the selected idea
+- `/labyrinth` — plant, visit, and prune ideas
+
+Every visit to the application home begins with an empty mat. Planting a new idea in the labyrinth briefly reveals its character before escorting it into its first dojo encounter.
+
 ## Dojo backend sketch
 
 The backend is intentionally play-first. It keeps each encounter in memory and exposes:

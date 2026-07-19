@@ -9,7 +9,8 @@ const ideas = {
 };
 
 let dojoSessionId = null;
-let activeIdea = ideas["stranger-dinner"];
+let activeIdea = null;
+let currentScreen = 'dojo-home';
 let playerPosition = { x: 0, y: 0 };
 let ideaPosition = { x: 0, y: 0 };
 let arenaState = 'idle';
@@ -32,6 +33,8 @@ let plantedIdeas = [];
 let prunedIdeas = [];
 let activePlantSlot = null;
 let activePruneIdea = null;
+let pendingEscortTimer = null;
+let lastFocusedElement = null;
 
 function cookieValue(name) {
   const cookie = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`));
@@ -237,9 +240,10 @@ function renderPlantedIdeas(animateId = '') {
   });
   Object.values(ideas).filter((idea) => !prunedIds.has(idea.id)).forEach((idea) => maze.append(makePruneControl(idea)));
   const total = Object.values(ideas).filter((idea) => !prunedIds.has(idea.id)).length;
+  const openPlaces = 7 - total;
   $('#garden-count').textContent = `${total} of 7 ideas are growing`;
   $('#dojo-count').textContent = `${total} guests`;
-  maze.setAttribute('aria-label', `A hedge labyrinth containing ${total} growing ideas and ${7 - total} places to plant a new seed`);
+  maze.setAttribute('aria-label', `A hedge labyrinth containing ${total} growing ideas and ${openPlaces} ${openPlaces === 1 ? 'place' : 'places'} to plant a new seed`);
 }
 
 async function saveIdeaToServer(idea) {
@@ -289,15 +293,69 @@ async function hydrateIdeasFromServer() {
 
 function showView(view) {
   $$('[data-view-panel]').forEach((panel) => panel.classList.toggle('hidden', panel.dataset.viewPanel !== view));
-  $$('.nav-link').forEach((link) => link.classList.toggle('active', link.dataset.view === (view === 'arena' ? 'dojo' : view)));
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  const activeNav = view === 'labyrinth' ? 'labyrinth' : 'dojo';
+  $$('[data-nav]').forEach((link) => {
+    const isActive = link.dataset.nav === activeNav;
+    link.classList.toggle('active', isActive);
+    if (isActive) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+  const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  window.scrollTo({ top: 0, behavior });
 }
 
-function routeTo(view, ideaId) {
-  const path = view === 'garden' ? '/' : view === 'dojo' ? '/dojo' : `/dojo/${ideaId}`;
-  window.history.pushState({}, '', path);
-  if (view === 'arena') enterArena(ideas[ideaId] || activeIdea, false);
-  else showView(view);
+function stopEncounter() {
+  dojoSessionId = null;
+  clearTimeout(wanderTimer);
+  clearInterval(qteTimer);
+  clearInterval(speechTimer);
+  arenaState = 'inactive';
+  $('#grapple-qte').classList.add('hidden');
+}
+
+function initializeEmptyMat() {
+  const scene = $('#arena-scene');
+  if (!scene.offsetWidth) return;
+  scene.classList.remove('is-aiming', 'is-launching', 'is-grappling', 'is-miss', 'qte-active', 'is-victory');
+  placePlayer(scene.clientWidth * .24, scene.clientHeight * .64);
+}
+
+function renderDojoHome() {
+  stopEncounter();
+  activeIdea = null;
+  currentScreen = 'dojo-home';
+  const arena = $('#arena-view');
+  arena.classList.add('is-empty');
+  $('#arena-kicker').textContent = 'the mat is ready';
+  $('#arena-idea-name').textContent = 'the dojo';
+  $('#arena-scene').setAttribute('aria-label', 'An empty dojo mat waiting for an invited idea');
+  $('#arena-scene').dataset.movement = 'disabled';
+  $('#idea-speech').classList.remove('is-visible');
+  showView('dojo');
+  requestAnimationFrame(initializeEmptyMat);
+}
+
+function renderRoster() {
+  stopEncounter();
+  activeIdea = null;
+  currentScreen = 'roster';
+  showView('roster');
+}
+
+function renderLabyrinth() {
+  stopEncounter();
+  activeIdea = null;
+  currentScreen = 'labyrinth';
+  showView('labyrinth');
+}
+
+function navigateTo(path, { replace = false, preserveEscort = false } = {}) {
+  if (!preserveEscort) {
+    clearTimeout(pendingEscortTimer);
+    pendingEscortTimer = null;
+  }
+  window.history[replace ? 'replaceState' : 'pushState']({}, '', path);
+  handleRoute();
 }
 
 function ideaFromElement(element) {
@@ -333,6 +391,8 @@ function updateDojo(response) {
 }
 
 async function startDojoSession(idea = activeIdea) {
+  if (!idea || currentScreen !== 'encounter') return;
+  const requestedIdeaId = idea.id;
   activeIdea = idea;
   dojoSessionId = null;
   try {
@@ -343,24 +403,31 @@ async function startDojoSession(idea = activeIdea) {
     });
     if (!response.ok) throw new Error('The dojo is resting.');
     const session = await response.json();
+    if (currentScreen !== 'encounter' || activeIdea?.id !== requestedIdeaId) return;
     dojoSessionId = session.sessionId;
     updateDojo(session);
   } catch {
+    if (currentScreen !== 'encounter' || activeIdea?.id !== requestedIdeaId) return;
     $('#dojo-presence').textContent = 'the mat is quiet';
     $('#idea-question').textContent = '“Make one small move.”';
   }
 }
 
-function enterArena(idea, updateUrl = true) {
+function activateEncounter(idea) {
+  stopEncounter();
   activeIdea = idea;
+  currentScreen = 'encounter';
+  $('#arena-view').classList.remove('is-empty');
+  $('#arena-scene').setAttribute('aria-label', 'A playful dojo mat. Drag from the penguin toward the idea and release to launch.');
+  $('#arena-scene').dataset.movement = 'enabled';
   setArenaIdea(idea);
-  showView('arena');
+  showView('dojo');
   requestAnimationFrame(initializeBout);
-  startDojoSession(idea);
-  if (updateUrl) window.history.pushState({}, '', `/dojo/${idea.id}`);
+  void startDojoSession(idea);
 }
 
 async function takeMove(moveId) {
+  if (!activeIdea || currentScreen !== 'encounter') return;
   if (!dojoSessionId) await startDojoSession();
   if (!dojoSessionId) return;
   try {
@@ -418,7 +485,7 @@ function savePositions() {
 
 function initializeBout(forceDefaults = false) {
   const scene = $('#arena-scene');
-  if (!scene.offsetWidth) return;
+  if (!scene.offsetWidth || !activeIdea || currentScreen !== 'encounter') return;
   arenaState = 'idle';
   clearInterval(qteTimer);
   $('#grapple-qte').classList.add('hidden');
@@ -441,12 +508,14 @@ function resetBout() {
 function scheduleIdeaWander() {
   clearTimeout(wanderTimer);
   wanderTimer = setTimeout(() => {
+    if (currentScreen !== 'encounter') return;
     if (arenaState === 'idle' && !$('#arena-view').classList.contains('hidden')) wanderIdea();
     scheduleIdeaWander();
   }, 2700 + Math.random() * 2200);
 }
 
 function wanderIdea(farFromPlayer = false) {
+  if (!activeIdea || currentScreen !== 'encounter') return;
   const scene = $('#arena-scene');
   const minY = Math.min(190, scene.clientHeight * .38);
   const maxY = scene.clientHeight - 150;
@@ -518,7 +587,7 @@ function updateAim(point) {
 }
 
 function beginAim(event) {
-  if (arenaState !== 'idle' || event.button > 0) return;
+  if (currentScreen !== 'encounter' || arenaState !== 'idle' || event.button > 0) return;
   ensureAudio();
   playBlip('aim');
   arenaState = 'aiming';
@@ -565,6 +634,7 @@ function launchPlayer(vector) {
   scene.classList.add('is-launching');
 
   function frame(now) {
+    if (currentScreen !== 'encounter') return;
     const raw = Math.min((now - startedAt) / 620, 1);
     const eased = 1 - Math.pow(1 - raw, 3);
     const x = start.x + (end.x - start.x) * eased;
@@ -578,6 +648,7 @@ function launchPlayer(vector) {
 }
 
 function startGrapple(target) {
+  if (currentScreen !== 'encounter') return;
   const scene = $('#arena-scene');
   arenaState = 'qte';
   placePlayer(target.x - 45, target.y + 18);
@@ -668,15 +739,29 @@ function finishGrapple(won) {
 }
 
 function handleRoute() {
-  const [, root, ideaId] = window.location.pathname.split('/');
-  const ideaIsPruned = prunedIdeas.some(({ id }) => id === ideaId);
-  if (root === 'dojo' && ideaId && ideas[ideaId] && !ideaIsPruned) return enterArena(ideas[ideaId], false);
-  if (root === 'dojo') return showView('dojo');
-  return showView('garden');
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (path === '/' || path === '/dojo') return renderDojoHome();
+  if (path === '/dojo/ideas') return renderRoster();
+  if (path === '/labyrinth') return renderLabyrinth();
+  const encounterMatch = path.match(/^\/dojo\/([^/]+)$/);
+  if (encounterMatch) {
+    let ideaId = encounterMatch[1];
+    try { ideaId = decodeURIComponent(ideaId); } catch { /* Treat malformed IDs as missing. */ }
+    const ideaIsPruned = prunedIdeas.some(({ id }) => id === ideaId);
+    if (ideas[ideaId] && !ideaIsPruned) return activateEncounter(ideas[ideaId]);
+    window.history.replaceState({}, '', '/dojo/ideas');
+    return renderRoster();
+  }
+  window.history.replaceState({}, '', '/');
+  return renderDojoHome();
 }
 
-$$('[data-route]').forEach((button) => button.addEventListener('click', () => routeTo(button.dataset.route)));
-$$('[data-view]').forEach((button) => button.addEventListener('click', () => routeTo(button.dataset.view)));
+document.addEventListener('click', (event) => {
+  const routeLink = event.target.closest('[data-route-to]');
+  if (!routeLink || event.defaultPrevented || event.button > 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  navigateTo(routeLink.dataset.routeTo);
+});
 $$('.arena-action[data-move-id]').forEach((button) => button.addEventListener('click', () => takeMove(button.dataset.moveId)));
 $('#reset-bout').addEventListener('click', resetBout);
 $('#qte-button').addEventListener('click', pressGrapple);
@@ -688,6 +773,20 @@ $('#arena-scene').addEventListener('pointercancel', releaseAim);
 const modal = $('#seed-modal');
 const input = $('#seed-input');
 const pruneModal = $('#prune-modal');
+
+function openDialog(dialog, focusTarget) {
+  lastFocusedElement = document.activeElement;
+  dialog.classList.remove('hidden');
+  requestAnimationFrame(() => focusTarget.focus());
+}
+
+function closeDialog(dialog) {
+  if (dialog.classList.contains('hidden')) return;
+  dialog.classList.add('hidden');
+  if (lastFocusedElement?.isConnected) lastFocusedElement.focus();
+  lastFocusedElement = null;
+}
+
 document.addEventListener('click', (event) => {
   const pruneButton = event.target.closest('[data-prune-idea]');
   if (pruneButton) {
@@ -695,24 +794,22 @@ document.addEventListener('click', (event) => {
     if (!activePruneIdea) return;
     $('#prune-name').textContent = activePruneIdea.name;
     $('#prune-title').textContent = activePruneIdea.title;
-    pruneModal.classList.remove('hidden');
-    setTimeout(() => $('#cancel-prune').focus(), 50);
+    openDialog(pruneModal, $('#cancel-prune'));
     return;
   }
   const seedButton = event.target.closest('[data-new-seed]');
   if (seedButton) {
     activePlantSlot = Number(seedButton.dataset.slot);
-    modal.classList.remove('hidden');
-    setTimeout(() => input.focus(), 50);
+    openDialog(modal, input);
     return;
   }
   const ideaButton = event.target.closest('[data-open-idea], [data-enter-dojo]');
-  if (ideaButton) enterArena(ideaFromElement(ideaButton));
+  if (ideaButton) navigateTo(`/dojo/${encodeURIComponent(ideaFromElement(ideaButton).id)}`);
 });
-$('#close-modal').addEventListener('click', () => modal.classList.add('hidden'));
-modal.addEventListener('click', (event) => { if (event.target === modal) modal.classList.add('hidden'); });
+$('#close-modal').addEventListener('click', () => closeDialog(modal));
+modal.addEventListener('click', (event) => { if (event.target === modal) closeDialog(modal); });
 function closePruneModal() {
-  pruneModal.classList.add('hidden');
+  closeDialog(pruneModal);
   activePruneIdea = null;
 }
 $('#close-prune-modal').addEventListener('click', closePruneModal);
@@ -748,28 +845,61 @@ $('#plant-button').addEventListener('click', () => {
   savePlantedIdeas();
   savePrunedIdeas();
   void saveIdeaToServer(idea);
-  modal.classList.add('hidden');
+  closeDialog(modal);
   input.value = '';
   $('#character-count').textContent = '0 / 240';
   activePlantSlot = null;
+  $('#labyrinth-status').textContent = `${idea.name} has taken root. Escorting it to the dojo.`;
   requestAnimationFrame(() => $(`[data-dynamic-idea][data-idea-id="${idea.id}"]`)?.focus());
+  const escortDelay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 150 : 1200;
+  pendingEscortTimer = setTimeout(() => {
+    pendingEscortTimer = null;
+    navigateTo(`/dojo/${encodeURIComponent(idea.id)}`, { preserveEscort: true });
+  }, escortDelay);
 });
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
-    modal.classList.add('hidden');
-    closePruneModal();
+    if (!modal.classList.contains('hidden')) closeDialog(modal);
+    if (!pruneModal.classList.contains('hidden')) closePruneModal();
+  }
+  const openModal = [modal, pruneModal].find((dialog) => !dialog.classList.contains('hidden'));
+  if (event.key === 'Tab' && openModal) {
+    const focusable = $$('button, textarea, input, a[href]').filter((element) => openModal.contains(element) && !element.disabled && element.offsetParent !== null);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
   if (event.target.matches('textarea, input')) return;
   if (event.key.toLowerCase() === 'x' && arenaState === 'qte') {
     event.preventDefault();
     pressGrapple();
   }
-  if (event.key.toLowerCase() === 'r' && !$('#arena-view').classList.contains('hidden')) resetBout();
+  if (event.key.toLowerCase() === 'r' && currentScreen === 'encounter') resetBout();
 });
-window.addEventListener('resize', () => { if (!$('#arena-view').classList.contains('hidden')) initializeBout(); });
-window.addEventListener('popstate', handleRoute);
-prunedIdeas = readPrunedIdeas();
-registerPlantedIdeas(readPlantedIdeas());
-void hydrateIdeasFromServer();
-handleRoute();
+window.addEventListener('resize', () => {
+  if (currentScreen === 'encounter') initializeBout();
+  if (currentScreen === 'dojo-home') initializeEmptyMat();
+});
+window.addEventListener('popstate', () => {
+  clearTimeout(pendingEscortTimer);
+  pendingEscortTimer = null;
+  handleRoute();
+});
+
+async function initializeApp() {
+  prunedIdeas = readPrunedIdeas();
+  registerPlantedIdeas(readPlantedIdeas());
+  const isDirectEncounter = /^\/dojo\/[^/]+\/?$/.test(window.location.pathname) && window.location.pathname.replace(/\/+$/, '') !== '/dojo/ideas';
+  if (!isDirectEncounter) handleRoute();
+  await hydrateIdeasFromServer();
+  handleRoute();
+}
+
+void initializeApp();
