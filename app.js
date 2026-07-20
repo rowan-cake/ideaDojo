@@ -40,13 +40,9 @@ const TAP_GRAPPLE_DURATION = 4000;
 const TAP_GRAPPLE_TARGET = 12;
 const CONVERSATION_REST_DURATION = 12000;
 const POSITION_KEY = 'idea-dojo.arena-positions.v1';
-const PLANTED_KEY = 'idea-dojo.planted-ideas.v2';
-const PRUNED_KEY = 'idea-dojo.pruned-ideas.v2';
-const PLANTED_COOKIE = 'idea_dojo_planted_v2';
-const PRUNED_COOKIE = 'idea_dojo_pruned_v2';
 const IDEA_STORAGE_VERSION_KEY = 'idea-dojo.storage-version';
-const LEGACY_IDEA_STORAGE_KEYS = ['idea-dojo.planted-ideas.v1', 'idea-dojo.pruned-ideas.v1'];
-const LEGACY_IDEA_COOKIES = ['idea_dojo_planted', 'idea_dojo_pruned'];
+const LEGACY_IDEA_STORAGE_KEYS = ['idea-dojo.planted-ideas.v1', 'idea-dojo.pruned-ideas.v1', 'idea-dojo.planted-ideas.v2', 'idea-dojo.pruned-ideas.v2'];
+const LEGACY_IDEA_COOKIES = ['idea_dojo_planted', 'idea_dojo_pruned', 'idea_dojo_planted_v2', 'idea_dojo_pruned_v2'];
 const PLANT_TONES = ['lilac', 'ochre', 'moss', 'blue'];
 const GARDEN_SLOTS = [1, 2, 3, 4, 5, 6, 7];
 const SLOT_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'];
@@ -58,28 +54,22 @@ let activePruneIdea = null;
 let pendingEscortTimer = null;
 let lastFocusedElement = null;
 let accountUser = null;
-let googleAuthConfig = { enabled: false, googleClientId: null };
-let googleIdentityPromise = null;
-let googleIdentityInitialized = false;
-
-function cookieValue(name) {
-  const cookie = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`));
-  return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
-}
 
 function clearLegacyIdeaStorage() {
-  if (localStorage.getItem(IDEA_STORAGE_VERSION_KEY) === '2') return;
+  if (localStorage.getItem(IDEA_STORAGE_VERSION_KEY) === '3') return;
   LEGACY_IDEA_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
   LEGACY_IDEA_COOKIES.forEach((name) => {
     document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
   });
-  localStorage.setItem(IDEA_STORAGE_VERSION_KEY, '2');
+  localStorage.setItem(IDEA_STORAGE_VERSION_KEY, '3');
 }
 
 function setAccountOpen(open) {
   const popover = $('#account-popover');
+  const trigger = $('#account-trigger');
+  if (!popover || !trigger) return;
   popover.classList.toggle('hidden', !open);
-  $('#account-trigger').setAttribute('aria-expanded', String(open));
+  trigger.setAttribute('aria-expanded', String(open));
 }
 
 function accountInitials(user) {
@@ -89,6 +79,7 @@ function accountInitials(user) {
 
 function renderAccount(user) {
   accountUser = user || null;
+  if (!$('#account-menu')) return;
   $('#account-signed-out').classList.toggle('hidden', Boolean(accountUser));
   $('#account-signed-in').classList.toggle('hidden', !accountUser);
   $('#account-trigger-label').textContent = accountUser ? accountInitials(accountUser) : 'sign in';
@@ -98,103 +89,20 @@ function renderAccount(user) {
   $('#account-name').textContent = accountUser.name;
   $('#account-email').textContent = accountUser.email;
   $('#account-initials').textContent = accountInitials(accountUser);
-  const avatar = $('#account-avatar');
-  avatar.classList.toggle('hidden', !accountUser.picture);
-  $('#account-initials').classList.toggle('hidden', Boolean(accountUser.picture));
-  if (accountUser.picture) avatar.src = accountUser.picture;
-  else avatar.removeAttribute('src');
-}
-
-function loadGoogleIdentity(clientId) {
-  if (!clientId) return Promise.resolve();
-  if (!googleIdentityPromise) {
-    googleIdentityPromise = new Promise((resolve, reject) => {
-      if (window.google?.accounts?.id) return resolve();
-      const script = document.createElement('script');
-      script.src = 'https://accounts.google.com/gsi/client';
-      script.async = true;
-      script.onload = resolve;
-      script.onerror = () => reject(new Error('Google sign-in could not be loaded.'));
-      document.head.append(script);
-    });
-  }
-
-  return googleIdentityPromise.then(() => {
-    if (!window.google?.accounts?.id) throw new Error('Google sign-in could not be loaded.');
-    if (!googleIdentityInitialized) {
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: ({ credential }) => { void completeGoogleSignIn(credential); },
-        auto_select: false,
-        cancel_on_tap_outside: true,
-      });
-      googleIdentityInitialized = true;
-    }
-    const button = $('#google-signin-button');
-    button.replaceChildren();
-    window.google.accounts.id.renderButton(button, {
-      type: 'standard',
-      theme: 'outline',
-      size: 'large',
-      text: 'continue_with',
-      shape: 'rectangular',
-      logo_alignment: 'left',
-      width: 280,
-    });
-    $('#account-status').textContent = 'Google verifies your identity; Idea Dojo keeps the app session.';
-  });
-}
-
-async function completeGoogleSignIn(credential) {
-  $('#account-status').textContent = 'verifying with Google…';
-  try {
-    const response = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ credential }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Google sign-in could not be completed.');
-    renderAccount(payload.user);
-  } catch (error) {
-    $('#account-status').textContent = error.message;
-  }
 }
 
 async function initializeAuth() {
   try {
-    const [configResponse, sessionResponse] = await Promise.all([
-      fetch('/api/auth/config'),
-      fetch('/api/auth/session'),
-    ]);
-    if (!configResponse.ok || !sessionResponse.ok) throw new Error('Account connection is unavailable.');
-    googleAuthConfig = await configResponse.json();
-    const session = await sessionResponse.json();
+    const response = await fetch(`/api/auth/session?returnTo=${encodeURIComponent(window.location.pathname)}`);
+    if (!response.ok) throw new Error('Account connection is unavailable.');
+    const session = await response.json();
+    $('#account-sign-in').href = session.signInPath;
+    $('#account-sign-out').href = session.signOutPath;
     renderAccount(session.user);
-    if (!googleAuthConfig.enabled) {
-      $('#account-status').textContent = 'Add GOOGLE_CLIENT_ID to .env to enable Google sign-in.';
-      return;
-    }
-    if (!session.user) await loadGoogleIdentity(googleAuthConfig.googleClientId);
+    $('#account-status').textContent = session.user ? 'private D1 storage connected' : 'sign in to save a private labyrinth';
   } catch (error) {
     renderAccount(null);
     $('#account-status').textContent = error.message;
-  }
-}
-
-async function signOutAccount() {
-  const button = $('#account-sign-out');
-  button.disabled = true;
-  try {
-    const response = await fetch('/api/auth/logout', { method: 'POST' });
-    if (!response.ok) throw new Error('Sign out could not be completed.');
-    window.google?.accounts?.id?.disableAutoSelect();
-    renderAccount(null);
-    if (googleAuthConfig.enabled) await loadGoogleIdentity(googleAuthConfig.googleClientId);
-  } catch (error) {
-    $('#account-status').textContent = error.message;
-  } finally {
-    button.disabled = false;
   }
 }
 
@@ -239,44 +147,6 @@ function normalizePrunedIdea(value) {
     createdAt: String(value.createdAt || new Date().toISOString()),
     prunedAt: String(value.prunedAt || new Date().toISOString()),
   };
-}
-
-function readPlantedIdeas() {
-  let values = [];
-  try { values = JSON.parse(localStorage.getItem(PLANTED_KEY) || '[]'); }
-  catch { /* Fall through to the cookie backup. */ }
-  if (!Array.isArray(values) || !values.length) {
-    try { values = JSON.parse(cookieValue(PLANTED_COOKIE) || '[]'); }
-    catch { values = []; }
-  }
-  const bySlot = new Map();
-  values.map(normalizePlantedIdea).filter(Boolean).forEach((idea) => bySlot.set(idea.slot, idea));
-  return [...bySlot.values()].slice(0, 7);
-}
-
-function readPrunedIdeas() {
-  let values = [];
-  try { values = JSON.parse(localStorage.getItem(PRUNED_KEY) || '[]'); }
-  catch { /* Fall through to the cookie backup. */ }
-  if (!Array.isArray(values) || !values.length) {
-    try { values = JSON.parse(cookieValue(PRUNED_COOKIE) || '[]'); }
-    catch { values = []; }
-  }
-  const byId = new Map();
-  values.map(normalizePrunedIdea).filter(Boolean).forEach((idea) => byId.set(idea.id, idea));
-  return [...byId.values()];
-}
-
-function savePlantedIdeas() {
-  const serialized = JSON.stringify(plantedIdeas);
-  localStorage.setItem(PLANTED_KEY, serialized);
-  document.cookie = `${PLANTED_COOKIE}=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
-}
-
-function savePrunedIdeas() {
-  const serialized = JSON.stringify(prunedIdeas);
-  localStorage.setItem(PRUNED_KEY, serialized);
-  document.cookie = `${PRUNED_COOKIE}=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
 function seedHash(seed) {
@@ -407,48 +277,42 @@ function renderPlantedIdeas(animateId = '') {
 }
 
 async function saveIdeaToServer(idea) {
-  try {
-    await fetch('/api/ideas', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ idea }),
-    });
-  } catch { /* Client storage remains the immediate offline fallback. */ }
+  const response = await fetch('/api/ideas', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ idea }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'The seed could not be stored.');
+  return payload.idea;
 }
 
 async function pruneIdeaOnServer(idea) {
-  try {
-    await fetch(`/api/ideas/${encodeURIComponent(idea.id)}/prune`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ idea }),
-    });
-  } catch { /* The local archive remains the immediate offline fallback. */ }
+  const response = await fetch(`/api/ideas/${encodeURIComponent(idea.id)}/prune`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ idea }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || 'The idea could not be pruned.');
+  return payload.idea;
 }
 
 async function hydrateIdeasFromServer() {
   try {
     const response = await fetch('/api/ideas');
-    if (!response.ok) return;
+    if (!response.ok) {
+      registerPlantedIdeas([]);
+      prunedIdeas = [];
+      return;
+    }
     const payload = await response.json();
-    const clientIdeas = [...plantedIdeas];
-    const clientPrunedIdeas = [...prunedIdeas];
-    const merged = new Map(payload.ideas?.map((idea) => [Number(idea.slot), idea]) || []);
-    clientIdeas.forEach((idea) => merged.set(idea.slot, idea));
-    const mergedPruned = new Map(payload.prunedIdeas?.map((idea) => [idea.id, idea]) || []);
-    clientPrunedIdeas.forEach((idea) => mergedPruned.set(idea.id, idea));
-    const activeById = new Map([...merged.values()].map((idea) => [idea.id, idea]));
-    prunedIdeas = [...mergedPruned.values()].map(normalizePrunedIdea).filter((idea) => {
-      const active = activeById.get(idea?.id);
-      return idea && (!active || new Date(active.createdAt) <= new Date(idea.prunedAt));
-    });
-    const prunedIds = new Set(prunedIdeas.map(({ id }) => id));
-    registerPlantedIdeas([...merged.values()].filter((idea) => !prunedIds.has(idea.id)));
-    savePlantedIdeas();
-    savePrunedIdeas();
-    clientIdeas.filter((idea) => !prunedIds.has(idea.id)).forEach((idea) => { void saveIdeaToServer(idea); });
-    clientPrunedIdeas.forEach((idea) => { void pruneIdeaOnServer(idea); });
-  } catch { /* The garden still works from client storage in offline mode. */ }
+    prunedIdeas = (payload.prunedIdeas || []).map(normalizePrunedIdea).filter(Boolean);
+    registerPlantedIdeas(payload.ideas || []);
+  } catch {
+    registerPlantedIdeas([]);
+    prunedIdeas = [];
+  }
 }
 
 function showView(view) {
@@ -1221,10 +1085,9 @@ $('#dialogue-input').addEventListener('keydown', (event) => {
     void submitDialogue(event);
   }
 });
-$('#account-trigger').addEventListener('click', () => {
+$('#account-trigger')?.addEventListener('click', () => {
   setAccountOpen($('#account-popover').classList.contains('hidden'));
 });
-$('#account-sign-out').addEventListener('click', () => { void signOutAccount(); });
 document.addEventListener('click', (event) => {
   if (!event.target.closest('#account-menu')) setAccountOpen(false);
 });
@@ -1275,15 +1138,22 @@ function closePruneModal() {
 $('#close-prune-modal').addEventListener('click', closePruneModal);
 $('#cancel-prune').addEventListener('click', closePruneModal);
 pruneModal.addEventListener('click', (event) => { if (event.target === pruneModal) closePruneModal(); });
-$('#confirm-prune').addEventListener('click', () => {
+$('#confirm-prune').addEventListener('click', async () => {
   if (!activePruneIdea) return;
   const idea = { ...activePruneIdea, prunedAt: new Date().toISOString() };
   const slot = idea.slot;
+  const button = $('#confirm-prune');
+  button.disabled = true;
+  try {
+    await pruneIdeaOnServer(idea);
+  } catch (error) {
+    $('#prune-title').textContent = error.message;
+    button.disabled = false;
+    return;
+  }
   prunedIdeas = [...prunedIdeas.filter(({ id }) => id !== idea.id), idea];
   registerPlantedIdeas(plantedIdeas.filter(({ id }) => id !== idea.id));
-  savePlantedIdeas();
-  savePrunedIdeas();
-  void pruneIdeaOnServer(idea);
+  button.disabled = false;
   closePruneModal();
   requestAnimationFrame(() => $(`[data-new-seed][data-slot="${slot}"]`)?.focus());
 });
@@ -1295,7 +1165,7 @@ seedInput.addEventListener('input', () => {
   $('#seed-character-count').textContent = `${seedInput.value.length} / 240`;
   $('#plant-status').textContent = 'title and seed are required';
 });
-$('#plant-button').addEventListener('click', () => {
+$('#plant-button').addEventListener('click', async () => {
   const title = titleInput.value.replace(/\s+/g, ' ').trim();
   const seed = seedInput.value.replace(/\s+/g, ' ').trim();
   if (!title) {
@@ -1317,11 +1187,19 @@ $('#plant-button').addEventListener('click', () => {
     return;
   }
   const idea = makeIdeaFromSeed(title, seed, slot);
+  const button = $('#plant-button');
+  button.disabled = true;
+  $('#plant-status').textContent = 'planting in your private labyrinth…';
+  try {
+    await saveIdeaToServer(idea);
+  } catch (error) {
+    $('#plant-status').textContent = error.message;
+    button.disabled = false;
+    return;
+  }
   prunedIdeas = prunedIdeas.filter(({ id }) => id !== idea.id);
   registerPlantedIdeas([...plantedIdeas, idea], idea.id);
-  savePlantedIdeas();
-  savePrunedIdeas();
-  void saveIdeaToServer(idea);
+  button.disabled = false;
   closeDialog(modal);
   titleInput.value = '';
   seedInput.value = '';
@@ -1384,10 +1262,10 @@ window.addEventListener('popstate', () => {
 });
 
 async function initializeApp() {
-  void initializeAuth();
   clearLegacyIdeaStorage();
-  prunedIdeas = readPrunedIdeas();
-  registerPlantedIdeas(readPlantedIdeas());
+  await initializeAuth();
+  prunedIdeas = [];
+  registerPlantedIdeas([]);
   const isDirectEncounter = /^\/dojo\/[^/]+\/?$/.test(window.location.pathname) && window.location.pathname.replace(/\/+$/, '') !== '/dojo/ideas';
   if (!isDirectEncounter) handleRoute();
   await hydrateIdeasFromServer();
