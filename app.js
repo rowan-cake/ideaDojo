@@ -2,13 +2,14 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
 const ideas = {
-  "tiny-libraries": { id: "tiny-libraries", slot: 1, name: "morrow", title: "the neighborhood of tiny libraries", seed: "A neighborhood network of tiny, welcoming libraries.", description: "A curious place to borrow a story, then leave one behind.", tone: "lilac", quip: "Take a story. Leave a secret in its place." },
-  "stranger-dinner": { id: "stranger-dinner", slot: 2, name: "amble", title: "a dinner party for strangers", seed: "A dinner party designed to make strangers feel unexpectedly at home.", description: "A brave table where no one has to arrive knowing anyone.", tone: "ochre", quip: "Who gets the first chair if nobody knows anyone?" },
-  "pocket-weather": { id: "pocket-weather", slot: 3, name: "pella", title: "the pocket weather station", seed: "A tiny weather ritual for noticing the emotional atmosphere of a day.", description: "A tiny ritual for noticing the atmosphere inside a day.", tone: "moss", quip: "Today feels cloudy with a chance of courage." },
-  "memory-map": { id: "memory-map", slot: 4, name: "orlo", title: "a map made of memories", seed: "A living map whose paths are made from small, personal memories.", description: "A map that changes when a small memory finds a new home.", tone: "blue", quip: "This path remembers something you forgot." },
+  "tiny-libraries": { id: "tiny-libraries", slot: 1, name: "Neighborhood Tiny Libraries", title: "Neighborhood Tiny Libraries", seed: "A neighborhood network of tiny, welcoming libraries.", description: "A neighborhood network of tiny, welcoming libraries.", tone: "lilac", quip: "What would make a tiny library feel as though it belonged to its block?" },
+  "stranger-dinner": { id: "stranger-dinner", slot: 2, name: "Dinner for Strangers", title: "Dinner for Strangers", seed: "A dinner party designed to make strangers feel unexpectedly at home.", description: "A dinner party designed to make strangers feel unexpectedly at home.", tone: "ochre", quip: "What would help a stranger feel at home before anyone knows what to say?" },
+  "pocket-weather": { id: "pocket-weather", slot: 3, name: "Pocket Weather Station", title: "Pocket Weather Station", seed: "A tiny weather ritual for noticing the emotional atmosphere of a day.", description: "A tiny weather ritual for noticing the emotional atmosphere of a day.", tone: "moss", quip: "What becomes noticeable when you give the mood of a day a weather report?" },
+  "memory-map": { id: "memory-map", slot: 4, name: "Living Memory Map", title: "Living Memory Map", seed: "A living map whose paths are made from small, personal memories.", description: "A living map whose paths are made from small, personal memories.", tone: "blue", quip: "Which memory should determine where this map begins?" },
 };
 
 let dojoSessionId = null;
+let dojoSessionPromise = null;
 let activeIdea = null;
 let currentScreen = 'dojo-home';
 let playerPosition = { x: 0, y: 0 };
@@ -17,14 +18,35 @@ let arenaState = 'idle';
 let aimVector = { x: 0, y: 0, power: 0 };
 let wanderTimer = null;
 let speechTimer = null;
-let qteTimer = null;
-let qteCount = 0;
+let tapGrappleTimer = null;
+let tapGrappleCount = 0;
+let clinchFrame = null;
+let clinchDragging = false;
+let clinchPointerId = null;
+let clinchControl = 0;
+let clinchLastFrame = 0;
+let clinchEndsAt = 0;
+let clinchDirectionAt = 0;
+let clinchVelocity = { x: 0, y: 0 };
+let dojoEncounter = 0;
+let dialoguePending = false;
+let localDialogueExchange = 0;
+let outcomeTimer = null;
 let audioContext = null;
-const QTE_TARGET = 12;
+const CLINCH_DURATION = 6000;
+const CLINCH_CONTROL_TARGET = 3000;
+const CLINCH_RADIUS = 76;
+const TAP_GRAPPLE_DURATION = 4000;
+const TAP_GRAPPLE_TARGET = 12;
+const CONVERSATION_REST_DURATION = 12000;
 const POSITION_KEY = 'idea-dojo.arena-positions.v1';
-const PLANTED_KEY = 'idea-dojo.planted-ideas.v1';
-const PRUNED_KEY = 'idea-dojo.pruned-ideas.v1';
-const PLANT_NAMES = ['luma', 'tavi', 'rill', 'nori', 'fable', 'sora', 'brio', 'minka', 'tillo', 'vesper', 'lilo', 'cairn'];
+const PLANTED_KEY = 'idea-dojo.planted-ideas.v2';
+const PRUNED_KEY = 'idea-dojo.pruned-ideas.v2';
+const PLANTED_COOKIE = 'idea_dojo_planted_v2';
+const PRUNED_COOKIE = 'idea_dojo_pruned_v2';
+const IDEA_STORAGE_VERSION_KEY = 'idea-dojo.storage-version';
+const LEGACY_IDEA_STORAGE_KEYS = ['idea-dojo.planted-ideas.v1', 'idea-dojo.pruned-ideas.v1'];
+const LEGACY_IDEA_COOKIES = ['idea_dojo_planted', 'idea_dojo_pruned'];
 const PLANT_TONES = ['lilac', 'ochre', 'moss', 'blue'];
 const GARDEN_SLOTS = [1, 2, 3, 4, 5, 6, 7];
 const SLOT_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven'];
@@ -35,22 +57,165 @@ let activePlantSlot = null;
 let activePruneIdea = null;
 let pendingEscortTimer = null;
 let lastFocusedElement = null;
+let accountUser = null;
+let googleAuthConfig = { enabled: false, googleClientId: null };
+let googleIdentityPromise = null;
+let googleIdentityInitialized = false;
 
 function cookieValue(name) {
   const cookie = document.cookie.split('; ').find((item) => item.startsWith(`${name}=`));
   return cookie ? decodeURIComponent(cookie.split('=').slice(1).join('=')) : '';
 }
 
+function clearLegacyIdeaStorage() {
+  if (localStorage.getItem(IDEA_STORAGE_VERSION_KEY) === '2') return;
+  LEGACY_IDEA_STORAGE_KEYS.forEach((key) => localStorage.removeItem(key));
+  LEGACY_IDEA_COOKIES.forEach((name) => {
+    document.cookie = `${name}=; path=/; max-age=0; SameSite=Lax`;
+  });
+  localStorage.setItem(IDEA_STORAGE_VERSION_KEY, '2');
+}
+
+function setAccountOpen(open) {
+  const popover = $('#account-popover');
+  popover.classList.toggle('hidden', !open);
+  $('#account-trigger').setAttribute('aria-expanded', String(open));
+}
+
+function accountInitials(user) {
+  const parts = String(user?.name || user?.email || 'idea dojo').trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'ID';
+}
+
+function renderAccount(user) {
+  accountUser = user || null;
+  $('#account-signed-out').classList.toggle('hidden', Boolean(accountUser));
+  $('#account-signed-in').classList.toggle('hidden', !accountUser);
+  $('#account-trigger-label').textContent = accountUser ? accountInitials(accountUser) : 'sign in';
+  $('#account-trigger').setAttribute('aria-label', accountUser ? `Open account menu for ${accountUser.name}` : 'Open account menu');
+  if (!accountUser) return;
+
+  $('#account-name').textContent = accountUser.name;
+  $('#account-email').textContent = accountUser.email;
+  $('#account-initials').textContent = accountInitials(accountUser);
+  const avatar = $('#account-avatar');
+  avatar.classList.toggle('hidden', !accountUser.picture);
+  $('#account-initials').classList.toggle('hidden', Boolean(accountUser.picture));
+  if (accountUser.picture) avatar.src = accountUser.picture;
+  else avatar.removeAttribute('src');
+}
+
+function loadGoogleIdentity(clientId) {
+  if (!clientId) return Promise.resolve();
+  if (!googleIdentityPromise) {
+    googleIdentityPromise = new Promise((resolve, reject) => {
+      if (window.google?.accounts?.id) return resolve();
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.async = true;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error('Google sign-in could not be loaded.'));
+      document.head.append(script);
+    });
+  }
+
+  return googleIdentityPromise.then(() => {
+    if (!window.google?.accounts?.id) throw new Error('Google sign-in could not be loaded.');
+    if (!googleIdentityInitialized) {
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: ({ credential }) => { void completeGoogleSignIn(credential); },
+        auto_select: false,
+        cancel_on_tap_outside: true,
+      });
+      googleIdentityInitialized = true;
+    }
+    const button = $('#google-signin-button');
+    button.replaceChildren();
+    window.google.accounts.id.renderButton(button, {
+      type: 'standard',
+      theme: 'outline',
+      size: 'large',
+      text: 'continue_with',
+      shape: 'rectangular',
+      logo_alignment: 'left',
+      width: 280,
+    });
+    $('#account-status').textContent = 'Google verifies your identity; Idea Dojo keeps the app session.';
+  });
+}
+
+async function completeGoogleSignIn(credential) {
+  $('#account-status').textContent = 'verifying with Google…';
+  try {
+    const response = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ credential }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Google sign-in could not be completed.');
+    renderAccount(payload.user);
+  } catch (error) {
+    $('#account-status').textContent = error.message;
+  }
+}
+
+async function initializeAuth() {
+  try {
+    const [configResponse, sessionResponse] = await Promise.all([
+      fetch('/api/auth/config'),
+      fetch('/api/auth/session'),
+    ]);
+    if (!configResponse.ok || !sessionResponse.ok) throw new Error('Account connection is unavailable.');
+    googleAuthConfig = await configResponse.json();
+    const session = await sessionResponse.json();
+    renderAccount(session.user);
+    if (!googleAuthConfig.enabled) {
+      $('#account-status').textContent = 'Add GOOGLE_CLIENT_ID to .env to enable Google sign-in.';
+      return;
+    }
+    if (!session.user) await loadGoogleIdentity(googleAuthConfig.googleClientId);
+  } catch (error) {
+    renderAccount(null);
+    $('#account-status').textContent = error.message;
+  }
+}
+
+async function signOutAccount() {
+  const button = $('#account-sign-out');
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/auth/logout', { method: 'POST' });
+    if (!response.ok) throw new Error('Sign out could not be completed.');
+    window.google?.accounts?.id?.disableAutoSelect();
+    renderAccount(null);
+    if (googleAuthConfig.enabled) await loadGoogleIdentity(googleAuthConfig.googleClientId);
+  } catch (error) {
+    $('#account-status').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function cleanRequiredText(value, maximum) {
+  if (typeof value !== 'string') return '';
+  const clean = value.replace(/\s+/g, ' ').trim();
+  return clean && clean.length <= maximum ? clean : '';
+}
+
 function normalizePlantedIdea(value) {
   const slot = Number(value?.slot);
-  if (!GARDEN_SLOTS.includes(slot) || !value?.id || !value?.seed) return null;
+  const title = cleanRequiredText(value?.title, 60);
+  const seed = cleanRequiredText(value?.seed, 240);
+  if (!GARDEN_SLOTS.includes(slot) || !value?.id || !title || !seed) return null;
   return {
     id: String(value.id).slice(0, 80),
     slot,
-    name: String(value.name || 'sprout').slice(0, 24),
-    title: String(value.title || value.seed).slice(0, 120),
-    seed: String(value.seed).slice(0, 240),
-    description: String(value.description || value.seed).slice(0, 300),
+    name: title,
+    title,
+    seed,
+    description: seed,
     tone: PLANT_TONES.includes(value.tone) ? value.tone : 'moss',
     quip: String(value.quip || 'I am still becoming. What do you notice?').slice(0, 140),
     createdAt: String(value.createdAt || new Date().toISOString()),
@@ -59,14 +224,16 @@ function normalizePlantedIdea(value) {
 
 function normalizePrunedIdea(value) {
   const slot = Number(value?.slot);
-  if (![1, 2, 3, 4, 5, 6, 7].includes(slot) || !value?.id || !value?.seed) return null;
+  const title = cleanRequiredText(value?.title, 60);
+  const seed = cleanRequiredText(value?.seed, 240);
+  if (![1, 2, 3, 4, 5, 6, 7].includes(slot) || !value?.id || !title || !seed) return null;
   return {
     id: String(value.id).slice(0, 80),
     slot,
-    name: String(value.name || 'sprout').slice(0, 24),
-    title: String(value.title || value.seed).slice(0, 120),
-    seed: String(value.seed).slice(0, 240),
-    description: String(value.description || value.seed).slice(0, 300),
+    name: title,
+    title,
+    seed,
+    description: seed,
     tone: PLANT_TONES.includes(value.tone) ? value.tone : 'moss',
     quip: String(value.quip || 'I am still becoming. What do you notice?').slice(0, 140),
     createdAt: String(value.createdAt || new Date().toISOString()),
@@ -79,7 +246,7 @@ function readPlantedIdeas() {
   try { values = JSON.parse(localStorage.getItem(PLANTED_KEY) || '[]'); }
   catch { /* Fall through to the cookie backup. */ }
   if (!Array.isArray(values) || !values.length) {
-    try { values = JSON.parse(cookieValue('idea_dojo_planted') || '[]'); }
+    try { values = JSON.parse(cookieValue(PLANTED_COOKIE) || '[]'); }
     catch { values = []; }
   }
   const bySlot = new Map();
@@ -92,7 +259,7 @@ function readPrunedIdeas() {
   try { values = JSON.parse(localStorage.getItem(PRUNED_KEY) || '[]'); }
   catch { /* Fall through to the cookie backup. */ }
   if (!Array.isArray(values) || !values.length) {
-    try { values = JSON.parse(cookieValue('idea_dojo_pruned') || '[]'); }
+    try { values = JSON.parse(cookieValue(PRUNED_COOKIE) || '[]'); }
     catch { values = []; }
   }
   const byId = new Map();
@@ -103,35 +270,32 @@ function readPrunedIdeas() {
 function savePlantedIdeas() {
   const serialized = JSON.stringify(plantedIdeas);
   localStorage.setItem(PLANTED_KEY, serialized);
-  document.cookie = `idea_dojo_planted=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
+  document.cookie = `${PLANTED_COOKIE}=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
 function savePrunedIdeas() {
   const serialized = JSON.stringify(prunedIdeas);
   localStorage.setItem(PRUNED_KEY, serialized);
-  document.cookie = `idea_dojo_pruned=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
+  document.cookie = `${PRUNED_COOKIE}=${encodeURIComponent(serialized)}; path=/; max-age=31536000; SameSite=Lax`;
 }
 
 function seedHash(seed) {
   return [...seed].reduce((hash, character) => ((hash << 5) - hash + character.charCodeAt(0)) | 0, 0) >>> 0;
 }
 
-function makeIdeaFromSeed(seed, slot) {
+function makeIdeaFromSeed(title, seed, slot) {
+  const cleanTitle = title.replace(/\s+/g, ' ').trim();
   const cleanSeed = seed.replace(/\s+/g, ' ').trim();
-  const hash = seedHash(cleanSeed);
-  const usedNames = new Set(Object.values(ideas).map(({ name }) => name));
-  let nameIndex = hash % PLANT_NAMES.length;
-  while (usedNames.has(PLANT_NAMES[nameIndex])) nameIndex = (nameIndex + 1) % PLANT_NAMES.length;
-  const title = cleanSeed.replace(/[.!?]+$/, '').slice(0, 90);
+  const hash = seedHash(`${cleanTitle}:${cleanSeed}`);
   return {
     id: `seed-${slot}-${hash.toString(36)}`,
     slot,
-    name: PLANT_NAMES[nameIndex],
-    title,
+    name: cleanTitle,
+    title: cleanTitle,
     seed: cleanSeed,
     description: cleanSeed,
     tone: PLANT_TONES[(hash + slot) % PLANT_TONES.length],
-    quip: `I began as “${cleanSeed.slice(0, 72)}${cleanSeed.length > 72 ? '…' : ''}”`,
+    quip: `What do you most want ${cleanTitle} to make possible?`,
     createdAt: new Date().toISOString(),
   };
 }
@@ -155,10 +319,8 @@ function makeGardenTree(idea, animate = false) {
   const label = document.createElement('span');
   label.className = 'tree-label';
   const name = document.createElement('strong');
-  name.textContent = idea.name;
-  const title = document.createElement('small');
-  title.textContent = idea.title.split(/\s+/).slice(0, 4).join(' ');
-  label.append(name, title);
+  name.textContent = idea.title;
+  label.append(name);
   button.append(label);
   return button;
 }
@@ -168,7 +330,7 @@ function makePruneControl(idea) {
   button.className = `prune-control prune-${SLOT_WORDS[idea.slot - 1]}`;
   button.dataset.pruneIdea = '';
   button.dataset.ideaId = idea.id;
-  button.setAttribute('aria-label', `Prune ${idea.name} from the labyrinth`);
+  button.setAttribute('aria-label', `Prune ${idea.title} from the labyrinth`);
   button.innerHTML = '<span aria-hidden="true">✂</span><small>prune</small>';
   return button;
 }
@@ -198,12 +360,10 @@ function makeRosterIdea(idea) {
   const status = document.createElement('small');
   status.textContent = 'newly planted';
   const name = document.createElement('strong');
-  name.textContent = idea.name;
-  const title = document.createElement('span');
-  title.textContent = idea.title;
+  name.textContent = idea.title;
   const description = document.createElement('em');
-  description.textContent = idea.description;
-  copy.append(status, name, title, description);
+  description.textContent = idea.seed;
+  copy.append(status, name, description);
   const arrow = document.createElement('span');
   arrow.className = 'roster-arrow';
   arrow.textContent = '↗';
@@ -306,17 +466,26 @@ function showView(view) {
 
 function stopEncounter() {
   dojoSessionId = null;
+  dojoSessionPromise = null;
   clearTimeout(wanderTimer);
-  clearInterval(qteTimer);
+  clearTimeout(outcomeTimer);
   clearInterval(speechTimer);
+  clearInterval(tapGrappleTimer);
+  cancelAnimationFrame(clinchFrame);
+  clinchFrame = null;
+  clinchDragging = false;
+  dialoguePending = false;
   arenaState = 'inactive';
-  $('#grapple-qte').classList.add('hidden');
+  $('#tap-grapple').classList.add('hidden');
+  $('#clinch-hud').classList.add('hidden');
+  $('#clinch-ring').classList.add('hidden');
+  $('#clinch-dialogue').classList.add('hidden');
 }
 
 function initializeEmptyMat() {
   const scene = $('#arena-scene');
   if (!scene.offsetWidth) return;
-  scene.classList.remove('is-aiming', 'is-launching', 'is-grappling', 'is-miss', 'qte-active', 'is-victory');
+  scene.classList.remove('is-aiming', 'is-launching', 'is-grappling', 'is-tap-grappling', 'is-clinching', 'is-talking', 'is-settled', 'is-miss', 'is-victory');
   placePlayer(scene.clientWidth * .24, scene.clientHeight * .64);
 }
 
@@ -361,54 +530,74 @@ function navigateTo(path, { replace = false, preserveEscort = false } = {}) {
 function ideaFromElement(element) {
   return ideas[element.dataset.ideaId] || {
     id: element.dataset.ideaId,
-    name: element.dataset.ideaName || 'new idea',
+    name: element.dataset.ideaTitle,
     title: element.dataset.ideaTitle,
     seed: element.dataset.ideaSeed,
-    description: element.dataset.ideaTitle,
+    description: element.dataset.ideaSeed,
     tone: element.dataset.ideaTone || 'moss',
   };
 }
 
 function setArenaIdea(idea) {
-  $('#arena-kicker').textContent = `quiet encounter · ${idea.title}`;
-  $('#arena-idea-name').textContent = idea.name;
-  $('#arena-tree-label').textContent = idea.name;
+  $('#arena-kicker').textContent = 'quiet encounter';
+  $('#arena-idea-name').textContent = idea.title;
+  $('#arena-tree-label').textContent = idea.title;
   $('#arena-idea-title').textContent = idea.title;
-  $('#arena-description').textContent = idea.description;
+  $('#arena-description').textContent = idea.seed;
   $('#arena-tree').className = `arena-tree idea-${idea.id}`;
   const creature = $('#arena-tree .tree-creature');
   creature.className = `tree-creature tree-${idea.tone}`;
   typeIdeaSpeech(idea.quip, false);
 }
 
+function updateEncounterCount(settled = false) {
+  $('#encounter-count').textContent = settled ? 'practice · settled' : `practice · ${dojoEncounter} / 3`;
+}
+
+function syncDojoState(response) {
+  if (Number.isInteger(response?.encounter)) dojoEncounter = response.encounter;
+  updateEncounterCount(response?.phase === 'settled' || response?.outcome === 'settled');
+}
+
 function updateDojo(response) {
-  const nudge = response.nudge;
-  const line = nudge?.text || response.beat;
+  syncDojoState(response);
+  const line = response.reply?.text || response.nudge?.text || response.beat;
   typeIdeaSpeech(line);
 }
 
 async function startDojoSession(idea = activeIdea) {
   if (!idea || currentScreen !== 'encounter') return;
+  if (dojoSessionPromise) return dojoSessionPromise;
   const requestedIdeaId = idea.id;
   activeIdea = idea;
   dojoSessionId = null;
-  try {
-    const response = await fetch('/api/dojo/sessions', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ idea }),
-    });
-    if (!response.ok) throw new Error('The dojo is resting.');
-    const session = await response.json();
-    if (currentScreen !== 'encounter' || activeIdea?.id !== requestedIdeaId) return;
-    dojoSessionId = session.sessionId;
-    updateDojo(session);
-  } catch { /* The encounter remains playable when the dojo API is offline. */ }
+  const sessionRequest = (async () => {
+    try {
+      const response = await fetch('/api/dojo/sessions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ idea }),
+      });
+      if (!response.ok) throw new Error('The dojo is resting.');
+      const session = await response.json();
+      if (currentScreen !== 'encounter' || activeIdea?.id !== requestedIdeaId) return;
+      dojoSessionId = session.sessionId;
+      updateDojo(session);
+    } catch { /* The encounter remains playable when the dojo API is offline. */ }
+    finally {
+      if (dojoSessionPromise === sessionRequest) dojoSessionPromise = null;
+    }
+  })();
+  dojoSessionPromise = sessionRequest;
+  return sessionRequest;
 }
 
 function activateEncounter(idea) {
   stopEncounter();
   activeIdea = idea;
+  dojoEncounter = 0;
+  localDialogueExchange = 0;
+  updateEncounterCount();
   currentScreen = 'encounter';
   $('#arena-view').classList.remove('is-empty');
   $('#arena-scene').setAttribute('aria-label', 'A playful dojo mat. Drag from the penguin toward the idea and release to launch.');
@@ -419,7 +608,7 @@ function activateEncounter(idea) {
   void startDojoSession(idea);
 }
 
-async function takeMove(moveId) {
+async function takeMove(moveId, { speak = true } = {}) {
   if (!activeIdea || currentScreen !== 'encounter') return;
   if (!dojoSessionId) await startDojoSession();
   if (!dojoSessionId) return;
@@ -430,8 +619,11 @@ async function takeMove(moveId) {
       body: JSON.stringify({ moveId }),
     });
     if (!response.ok) throw new Error('The mat is quiet.');
-    updateDojo(await response.json());
-  } catch { /* Keep the local encounter moving when a dojo move cannot be saved. */ }
+    const dojo = await response.json();
+    syncDojoState(dojo);
+    if (speak) updateDojo(dojo);
+    return dojo;
+  } catch { return null; /* Keep the local encounter moving when a dojo move cannot be saved. */ }
 }
 
 function placePlayer(x, y) {
@@ -478,9 +670,13 @@ function initializeBout() {
   const scene = $('#arena-scene');
   if (!scene.offsetWidth || !activeIdea || currentScreen !== 'encounter') return;
   arenaState = 'idle';
-  clearInterval(qteTimer);
-  $('#grapple-qte').classList.add('hidden');
-  scene.classList.remove('is-aiming', 'is-launching', 'is-grappling', 'is-miss', 'qte-active', 'is-victory');
+  cancelAnimationFrame(clinchFrame);
+  clearInterval(tapGrappleTimer);
+  $('#tap-grapple').classList.add('hidden');
+  $('#clinch-hud').classList.add('hidden');
+  $('#clinch-ring').classList.add('hidden');
+  $('#clinch-dialogue').classList.add('hidden');
+  scene.classList.remove('is-aiming', 'is-launching', 'is-grappling', 'is-tap-grappling', 'is-clinching', 'is-talking', 'is-settled', 'is-miss', 'is-victory');
   $('#arena-tree').classList.remove('is-taken-down');
   $('#aim-line').style.width = '0px';
   const saved = readSavedPositions()[activeIdea.id];
@@ -514,7 +710,6 @@ function wanderIdea(farFromPlayer = false) {
   }
   placeIdea(next.x, next.y, true);
   savePositions();
-  if (Math.random() > .56) typeIdeaSpeech(activeIdea.quip);
 }
 
 function ensureAudio() {
@@ -572,6 +767,7 @@ function updateAim(point) {
 }
 
 function beginAim(event) {
+  if (arenaState === 'clinching') return beginClinchDrag(event);
   if (currentScreen !== 'encounter' || arenaState !== 'idle' || event.button > 0) return;
   ensureAudio();
   playBlip('aim');
@@ -584,11 +780,13 @@ function beginAim(event) {
 }
 
 function moveAim(event) {
+  if (arenaState === 'clinching' && clinchDragging) return moveClinchPlayer(localPoint(event));
   if (arenaState !== 'aiming') return;
   updateAim(localPoint(event));
 }
 
 function releaseAim(event) {
+  if (clinchDragging) return endClinchDrag(event);
   if (arenaState !== 'aiming') return;
   const scene = $('#arena-scene');
   if (scene.hasPointerCapture(event.pointerId)) scene.releasePointerCapture(event.pointerId);
@@ -634,26 +832,152 @@ function launchPlayer(vector) {
 function startGrapple(target) {
   if (currentScreen !== 'encounter') return;
   const scene = $('#arena-scene');
-  arenaState = 'qte';
   placePlayer(target.x - 45, target.y + 18);
+  placeIdea(target.x, target.y);
   savePositions();
   scene.classList.remove('is-launching');
-  scene.classList.add('qte-active');
   $('#impact-burst').style.left = `${target.x}px`;
   $('#impact-burst').style.top = `${target.y}px`;
-  qteCount = 0;
-  $('#qte-count').textContent = `0 / ${QTE_TARGET}`;
-  $('#qte-progress').style.width = '0%';
-  $('#grapple-qte').classList.remove('hidden');
-  typeIdeaSpeech('You caught me. Now hold on!');
+  if (Math.random() < .5) startTapGrapple();
+  else startClinchGrapple();
+}
+
+function startTapGrapple() {
+  const scene = $('#arena-scene');
+  arenaState = 'tap-grappling';
+  scene.classList.add('is-tap-grappling');
+  tapGrappleCount = 0;
+  $('#tap-grapple-count').textContent = `0 / ${TAP_GRAPPLE_TARGET}`;
+  $('#tap-grapple-progress').style.width = '0%';
+  $('#tap-grapple-timer').textContent = '4.0 seconds';
+  $('#tap-grapple').classList.remove('hidden');
+  typeIdeaSpeech('You caught me. Quick—hold on!');
   playBlip('hit');
-  const endsAt = performance.now() + 4000;
-  clearInterval(qteTimer);
-  qteTimer = setInterval(() => {
+  const endsAt = performance.now() + TAP_GRAPPLE_DURATION;
+  clearInterval(tapGrappleTimer);
+  tapGrappleTimer = setInterval(() => {
     const remaining = Math.max(0, endsAt - performance.now());
-    $('#qte-timer').textContent = `${(remaining / 1000).toFixed(1)} seconds`;
-    if (!remaining) finishGrapple(false);
+    $('#tap-grapple-timer').textContent = `${(remaining / 1000).toFixed(1)} seconds`;
+    if (!remaining) finishTapGrapple(false);
   }, 50);
+}
+
+function startClinchGrapple() {
+  const scene = $('#arena-scene');
+  arenaState = 'clinching';
+  scene.classList.add('is-clinching');
+  $('#clinch-progress').style.width = '0%';
+  $('#clinch-timer').textContent = '6.0 seconds';
+  $('#clinch-hud').classList.remove('hidden');
+  $('#clinch-ring').classList.remove('hidden');
+  clinchControl = 0;
+  clinchLastFrame = performance.now();
+  clinchEndsAt = clinchLastFrame + CLINCH_DURATION;
+  clinchDirectionAt = 0;
+  positionClinchRing();
+  typeIdeaSpeech('You caught me. Stay with the movement!');
+  playBlip('hit');
+  clinchFrame = requestAnimationFrame(updateClinch);
+}
+
+function clampToMat(point) {
+  const scene = $('#arena-scene');
+  return {
+    x: Math.max(48, Math.min(scene.clientWidth - 48, point.x)),
+    y: Math.max(145, Math.min(scene.clientHeight - 72, point.y)),
+  };
+}
+
+function positionClinchRing() {
+  const ring = $('#clinch-ring');
+  ring.style.left = `${playerPosition.x}px`;
+  ring.style.top = `${playerPosition.y}px`;
+}
+
+function redirectIdeaResistance(now) {
+  const away = Math.atan2(ideaPosition.y - playerPosition.y, ideaPosition.x - playerPosition.x);
+  const angle = away + (Math.random() - .5) * 2.1;
+  const difficulty = 1 + dojoEncounter * .15;
+  const speed = 54 * difficulty;
+  clinchVelocity = { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed };
+  clinchDirectionAt = now + 480 + Math.random() * 360;
+}
+
+function updateClinch(now) {
+  if (arenaState !== 'clinching') return;
+  const elapsed = Math.min(45, now - clinchLastFrame);
+  const seconds = elapsed / 1000;
+  clinchLastFrame = now;
+  if (now >= clinchDirectionAt) redirectIdeaResistance(now);
+
+  const scene = $('#arena-scene');
+  let next = clampToMat({
+    x: ideaPosition.x + clinchVelocity.x * seconds,
+    y: ideaPosition.y + clinchVelocity.y * seconds,
+  });
+  if (next.x <= 48 || next.x >= scene.clientWidth - 48) clinchVelocity.x *= -1;
+  if (next.y <= 145 || next.y >= scene.clientHeight - 72) clinchVelocity.y *= -1;
+  placeIdea(next.x, next.y);
+
+  const distance = Math.hypot(ideaPosition.x - playerPosition.x, ideaPosition.y - playerPosition.y);
+  const controlled = distance <= CLINCH_RADIUS;
+  $('#clinch-ring').classList.toggle('is-controlled', controlled);
+  clinchControl = controlled
+    ? Math.min(CLINCH_CONTROL_TARGET, clinchControl + elapsed)
+    : Math.max(0, clinchControl - elapsed * .75);
+  $('#clinch-progress').style.width = `${clinchControl / CLINCH_CONTROL_TARGET * 100}%`;
+  const remaining = Math.max(0, clinchEndsAt - now);
+  $('#clinch-timer').textContent = `${(remaining / 1000).toFixed(1)} seconds`;
+
+  if (clinchControl >= CLINCH_CONTROL_TARGET) return finishClinch(true);
+  if (!remaining) return finishClinch(false);
+  clinchFrame = requestAnimationFrame(updateClinch);
+}
+
+function beginClinchDrag(event) {
+  if (event.target.closest('.clinch-dialogue')) return;
+  const scene = $('#arena-scene');
+  clinchDragging = true;
+  clinchPointerId = event.pointerId;
+  scene.setPointerCapture(event.pointerId);
+  moveClinchPlayer(localPoint(event));
+  event.preventDefault();
+}
+
+function moveClinchPlayer(point) {
+  const next = clampToMat(point);
+  placePlayer(next.x, next.y);
+  positionClinchRing();
+}
+
+function endClinchDrag(event) {
+  if (!clinchDragging || event.pointerId !== clinchPointerId) return;
+  const scene = $('#arena-scene');
+  if (scene.hasPointerCapture(event.pointerId)) scene.releasePointerCapture(event.pointerId);
+  clinchDragging = false;
+  clinchPointerId = null;
+}
+
+function pressTapGrapple() {
+  if (arenaState !== 'tap-grappling') return;
+  tapGrappleCount += 1;
+  $('#tap-grapple-count').textContent = `${tapGrappleCount} / ${TAP_GRAPPLE_TARGET}`;
+  $('#tap-grapple-progress').style.width = `${Math.min(100, tapGrappleCount / TAP_GRAPPLE_TARGET * 100)}%`;
+  const button = $('#tap-grapple-button');
+  button.classList.remove('is-pressed');
+  void button.offsetWidth;
+  button.classList.add('is-pressed');
+  playBlip('press', tapGrappleCount);
+  if (tapGrappleCount >= TAP_GRAPPLE_TARGET) finishTapGrapple(true);
+}
+
+function finishTapGrapple(won) {
+  if (arenaState !== 'tap-grappling') return;
+  arenaState = 'resolving';
+  clearInterval(tapGrappleTimer);
+  $('#tap-grapple').classList.add('hidden');
+  $('#arena-scene').classList.remove('is-tap-grappling');
+  void resolvePhysicalGrapple(won);
 }
 
 function missIdea() {
@@ -669,45 +993,193 @@ function missIdea() {
   }, 650);
 }
 
-function pressGrapple() {
-  if (arenaState !== 'qte') return;
-  qteCount += 1;
-  $('#qte-count').textContent = `${qteCount} / ${QTE_TARGET}`;
-  $('#qte-progress').style.width = `${Math.min(100, qteCount / QTE_TARGET * 100)}%`;
-  const button = $('#qte-button');
-  button.classList.remove('is-pressed');
-  void button.offsetWidth;
-  button.classList.add('is-pressed');
-  playBlip('press', qteCount);
-  if (qteCount >= QTE_TARGET) finishGrapple(true);
+async function finishClinch(won) {
+  if (arenaState !== 'clinching') return;
+  arenaState = 'resolving';
+  cancelAnimationFrame(clinchFrame);
+  clinchFrame = null;
+  clinchDragging = false;
+  $('#clinch-hud').classList.add('hidden');
+  $('#clinch-ring').classList.add('hidden');
+  const scene = $('#arena-scene');
+  scene.classList.remove('is-clinching');
+  await resolvePhysicalGrapple(won);
 }
 
-function finishGrapple(won) {
-  if (arenaState !== 'qte') return;
-  clearInterval(qteTimer);
-  $('#grapple-qte').classList.add('hidden');
+async function resolvePhysicalGrapple(won) {
   const scene = $('#arena-scene');
-  scene.classList.remove('qte-active');
   if (won) {
-    arenaState = 'victory';
     scene.classList.add('is-grappling', 'is-victory');
-    $('#arena-tree').classList.add('is-taken-down');
     typeIdeaSpeech('Okay, okay! Here is what I was protecting...');
     playBlip('win');
-    takeMove('grapple');
-    setTimeout(() => {
-      scene.classList.remove('is-grappling', 'is-victory');
-      $('#arena-tree').classList.remove('is-taken-down');
-      arenaState = 'idle';
-      wanderIdea(true);
-    }, 1500);
+    const response = await takeMove('grapple', { speak: false });
+    if (currentScreen !== 'encounter') return;
+    if (!response) {
+      dojoEncounter = Math.min(3, dojoEncounter + 1);
+      updateEncounterCount();
+    }
+    openClinchDialogue(response?.reply?.text || 'You held on long enough to feel the question under my bark. What did you notice?');
   } else {
     arenaState = 'recovering';
-    typeIdeaSpeech('Too slow! Catch me again.');
+    typeIdeaSpeech('I slipped free. Catch the movement, not just me.');
     playBlip('fail');
     wanderIdea(true);
     setTimeout(() => { arenaState = 'idle'; }, 700);
   }
+}
+
+function appendDialogueMessage(role, text, pending = false) {
+  const message = document.createElement('p');
+  message.className = `dialogue-message is-${role}${pending ? ' is-pending' : ''}`;
+  const label = document.createElement('small');
+  label.textContent = role === 'idea' ? activeIdea.title : 'you';
+  const copy = document.createElement('span');
+  copy.textContent = text;
+  message.append(label, copy);
+  $('#dialogue-transcript').append(message);
+  message.scrollIntoView({ block: 'nearest' });
+  return message;
+}
+
+function setDialogueBusy(busy) {
+  dialoguePending = busy;
+  $('#dialogue-input').disabled = busy;
+  $('#dialogue-send').disabled = busy;
+  $('#dialogue-form').classList.toggle('is-waiting', busy);
+}
+
+function openClinchDialogue(openingLine) {
+  const scene = $('#arena-scene');
+  arenaState = 'talking';
+  localDialogueExchange = 0;
+  clearInterval(speechTimer);
+  scene.classList.remove('is-victory');
+  scene.classList.add('is-talking');
+  $('#idea-speech').classList.remove('is-visible');
+  $('#dialogue-transcript').replaceChildren();
+  $('#dialogue-input').value = '';
+  $('#dialogue-form').classList.remove('is-complete');
+  $('#dialogue-title').textContent = 'listen closely';
+  $('#dialogue-status').textContent = '0 / 400';
+  $('#dialogue-exchange').textContent = 'conversation opening';
+  $('#clinch-dialogue').classList.remove('hidden');
+  appendDialogueMessage('idea', openingLine);
+  setDialogueBusy(false);
+  requestAnimationFrame(() => $('#dialogue-input').focus());
+}
+
+function localDialogueResponse(exchange) {
+  const title = activeIdea?.title || 'this idea';
+  const replies = dojoEncounter === 1
+    ? [
+      `What do you most want ${title} to make possible?`,
+      `Why would that change matter to the people involved?`,
+      `Which part of that purpose feels most essential to protect?`,
+    ]
+    : dojoEncounter === 2
+      ? [
+        `What assumption inside ${title} feels least tested?`,
+        `Where might the audience want something different from what you expect?`,
+        `Which part are you trying to make certain too early?`,
+      ]
+      : [
+        `What is the smallest useful version of ${title} you could try?`,
+        `What would that experiment need to teach you?`,
+        `What can you make first without pretending it is the final form?`,
+      ];
+  const ends = exchange >= 3;
+  return {
+    reply: { source: 'ambient', text: replies[Math.min(exchange - 1, replies.length - 1)] },
+    encounter: dojoEncounter,
+    exchange,
+    phase: ends ? (dojoEncounter >= 3 ? 'settled' : 'chasing') : 'talking',
+    outcome: ends ? (dojoEncounter >= 3 ? 'settled' : 'escape') : 'continue',
+  };
+}
+
+async function submitDialogue(event) {
+  event?.preventDefault();
+  if (arenaState !== 'talking' || dialoguePending) return;
+  const input = $('#dialogue-input');
+  const message = input.value.trim();
+  if (!message) {
+    $('#dialogue-status').textContent = 'say something first';
+    input.focus();
+    return;
+  }
+
+  const pendingMessage = appendDialogueMessage('user', message, true);
+  setDialogueBusy(true);
+  $('#dialogue-status').textContent = 'the idea is listening…';
+  try {
+    let response;
+    if (dojoSessionId) {
+      const request = await fetch(`/api/dojo/sessions/${dojoSessionId}/messages`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message }),
+      });
+      if (!request.ok) {
+        const problem = await request.json().catch(() => ({}));
+        throw new Error(problem.error || 'The idea lost the thread.');
+      }
+      response = await request.json();
+    } else {
+      response = localDialogueResponse(localDialogueExchange + 1);
+    }
+
+    pendingMessage.classList.remove('is-pending');
+    input.value = '';
+    localDialogueExchange = response.exchange;
+    syncDojoState(response);
+    appendDialogueMessage('idea', response.reply.text);
+    $('#dialogue-exchange').textContent = `exchange ${response.exchange}`;
+    $('#dialogue-status').textContent = '0 / 400';
+
+    if (response.outcome === 'escape') return prepareIdeaEscape();
+    if (response.outcome === 'settled') return settleIdeaOnMat();
+    setDialogueBusy(false);
+    input.focus();
+  } catch (error) {
+    pendingMessage.remove();
+    setDialogueBusy(false);
+    $('#dialogue-status').textContent = `${error.message} Press send to retry.`;
+    input.focus();
+  }
+}
+
+function prepareIdeaEscape() {
+  arenaState = 'conversation-ending';
+  setDialogueBusy(true);
+  $('#dialogue-title').textContent = 'the idea found an opening';
+  $('#dialogue-exchange').textContent = 'conversation complete';
+  $('#dialogue-status').textContent = 'take a moment with its last words · the chase resumes in 12 seconds';
+  outcomeTimer = setTimeout(() => {
+    const scene = $('#arena-scene');
+    $('#clinch-dialogue').classList.add('hidden');
+    scene.classList.remove('is-grappling', 'is-talking');
+    scene.classList.add('is-miss');
+    wanderIdea(true);
+    playBlip('fail');
+    setTimeout(() => {
+      scene.classList.remove('is-miss');
+      arenaState = 'idle';
+    }, 700);
+  }, CONVERSATION_REST_DURATION);
+}
+
+function settleIdeaOnMat() {
+  arenaState = 'settled';
+  setDialogueBusy(true);
+  $('#arena-scene').classList.remove('is-grappling', 'is-talking');
+  $('#arena-scene').classList.add('is-settled');
+  $('#dialogue-title').textContent = 'the idea settles beside you';
+  $('#dialogue-exchange').textContent = 'conversation complete';
+  $('#dialogue-form').classList.add('is-complete');
+  $('#dialogue-status').textContent = 'practice complete · the idea is staying';
+  updateEncounterCount(true);
+  savePositions();
+  playBlip('win');
 }
 
 function handleRoute() {
@@ -734,14 +1206,32 @@ document.addEventListener('click', (event) => {
   event.preventDefault();
   navigateTo(routeLink.dataset.routeTo);
 });
-$('#qte-button').addEventListener('click', pressGrapple);
+$('#tap-grapple-button').addEventListener('click', pressTapGrapple);
 $('#arena-scene').addEventListener('pointerdown', beginAim);
 $('#arena-scene').addEventListener('pointermove', moveAim);
 $('#arena-scene').addEventListener('pointerup', releaseAim);
 $('#arena-scene').addEventListener('pointercancel', releaseAim);
+$('#dialogue-form').addEventListener('submit', submitDialogue);
+$('#dialogue-input').addEventListener('input', () => {
+  if (!dialoguePending) $('#dialogue-status').textContent = `${$('#dialogue-input').value.length} / 400`;
+});
+$('#dialogue-input').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    void submitDialogue(event);
+  }
+});
+$('#account-trigger').addEventListener('click', () => {
+  setAccountOpen($('#account-popover').classList.contains('hidden'));
+});
+$('#account-sign-out').addEventListener('click', () => { void signOutAccount(); });
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('#account-menu')) setAccountOpen(false);
+});
 
 const modal = $('#seed-modal');
-const input = $('#seed-input');
+const titleInput = $('#idea-title-input');
+const seedInput = $('#seed-input');
 const pruneModal = $('#prune-modal');
 
 function openDialog(dialog, focusTarget) {
@@ -762,15 +1252,15 @@ document.addEventListener('click', (event) => {
   if (pruneButton) {
     activePruneIdea = ideas[pruneButton.dataset.ideaId];
     if (!activePruneIdea) return;
-    $('#prune-name').textContent = activePruneIdea.name;
-    $('#prune-title').textContent = activePruneIdea.title;
+    $('#prune-name').textContent = activePruneIdea.title;
+    $('#prune-title').textContent = activePruneIdea.seed;
     openDialog(pruneModal, $('#cancel-prune'));
     return;
   }
   const seedButton = event.target.closest('[data-new-seed]');
   if (seedButton) {
     activePlantSlot = Number(seedButton.dataset.slot);
-    openDialog(modal, input);
+    openDialog(modal, titleInput);
     return;
   }
   const ideaButton = event.target.closest('[data-open-idea], [data-enter-dojo]');
@@ -797,29 +1287,49 @@ $('#confirm-prune').addEventListener('click', () => {
   closePruneModal();
   requestAnimationFrame(() => $(`[data-new-seed][data-slot="${slot}"]`)?.focus());
 });
-input.addEventListener('input', () => { $('#character-count').textContent = `${input.value.length} / 240`; });
+titleInput.addEventListener('input', () => {
+  $('#title-character-count').textContent = `${titleInput.value.length} / 60`;
+  $('#plant-status').textContent = 'title and seed are required';
+});
+seedInput.addEventListener('input', () => {
+  $('#seed-character-count').textContent = `${seedInput.value.length} / 240`;
+  $('#plant-status').textContent = 'title and seed are required';
+});
 $('#plant-button').addEventListener('click', () => {
-  const seed = input.value.trim();
-  if (!seed) { input.focus(); return; }
+  const title = titleInput.value.replace(/\s+/g, ' ').trim();
+  const seed = seedInput.value.replace(/\s+/g, ' ').trim();
+  if (!title) {
+    $('#plant-status').textContent = 'give the idea a title';
+    titleInput.focus();
+    return;
+  }
+  if (!seed) {
+    $('#plant-status').textContent = 'write the original seed';
+    seedInput.focus();
+    return;
+  }
   const occupied = new Set(Object.values(ideas)
     .filter((idea) => !prunedIdeas.some(({ id }) => id === idea.id))
     .map(({ slot }) => slot));
   const slot = [activePlantSlot, ...GARDEN_SLOTS].find((candidate) => GARDEN_SLOTS.includes(candidate) && !occupied.has(candidate));
   if (!slot) {
-    $('#character-count').textContent = 'all seven plots are growing';
+    $('#plant-status').textContent = 'all seven plots are growing';
     return;
   }
-  const idea = makeIdeaFromSeed(seed, slot);
+  const idea = makeIdeaFromSeed(title, seed, slot);
   prunedIdeas = prunedIdeas.filter(({ id }) => id !== idea.id);
   registerPlantedIdeas([...plantedIdeas, idea], idea.id);
   savePlantedIdeas();
   savePrunedIdeas();
   void saveIdeaToServer(idea);
   closeDialog(modal);
-  input.value = '';
-  $('#character-count').textContent = '0 / 240';
+  titleInput.value = '';
+  seedInput.value = '';
+  $('#title-character-count').textContent = '0 / 60';
+  $('#seed-character-count').textContent = '0 / 240';
+  $('#plant-status').textContent = 'title and seed are required';
   activePlantSlot = null;
-  $('#labyrinth-status').textContent = `${idea.name} has taken root. Escorting it to the dojo.`;
+  $('#labyrinth-status').textContent = `${idea.title} has taken root. Escorting it to the dojo.`;
   requestAnimationFrame(() => $(`[data-dynamic-idea][data-idea-id="${idea.id}"]`)?.focus());
   const escortDelay = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 150 : 1200;
   pendingEscortTimer = setTimeout(() => {
@@ -832,6 +1342,7 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     if (!modal.classList.contains('hidden')) closeDialog(modal);
     if (!pruneModal.classList.contains('hidden')) closePruneModal();
+    setAccountOpen(false);
   }
   const openModal = [modal, pruneModal].find((dialog) => !dialog.classList.contains('hidden'));
   if (event.key === 'Tab' && openModal) {
@@ -847,13 +1358,23 @@ document.addEventListener('keydown', (event) => {
     }
   }
   if (event.target.matches('textarea, input')) return;
-  if (event.key.toLowerCase() === 'x' && arenaState === 'qte') {
+  if (arenaState === 'tap-grappling' && event.key.toLowerCase() === 'x') {
     event.preventDefault();
-    pressGrapple();
+    pressTapGrapple();
+    return;
+  }
+  if (arenaState === 'clinching' && ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].includes(event.key.toLowerCase())) {
+    event.preventDefault();
+    const directions = {
+      arrowup: [0, -18], w: [0, -18], arrowdown: [0, 18], s: [0, 18],
+      arrowleft: [-18, 0], a: [-18, 0], arrowright: [18, 0], d: [18, 0],
+    };
+    const [x, y] = directions[event.key.toLowerCase()];
+    moveClinchPlayer({ x: playerPosition.x + x, y: playerPosition.y + y });
   }
 });
 window.addEventListener('resize', () => {
-  if (currentScreen === 'encounter') initializeBout();
+  if (currentScreen === 'encounter' && ['idle', 'inactive'].includes(arenaState)) initializeBout();
   if (currentScreen === 'dojo-home') initializeEmptyMat();
 });
 window.addEventListener('popstate', () => {
@@ -863,6 +1384,8 @@ window.addEventListener('popstate', () => {
 });
 
 async function initializeApp() {
+  void initializeAuth();
+  clearLegacyIdeaStorage();
   prunedIdeas = readPrunedIdeas();
   registerPlantedIdeas(readPlantedIdeas());
   const isDirectEncounter = /^\/dojo\/[^/]+\/?$/.test(window.location.pathname) && window.location.pathname.replace(/\/+$/, '') !== '/dojo/ideas';
