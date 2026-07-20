@@ -326,7 +326,7 @@ function renderDojoHome() {
   currentScreen = 'dojo-home';
   const arena = $('#arena-view');
   arena.classList.add('is-empty');
-  $('#arena-kicker').textContent = 'the mat is ready';
+  $('#arena-kicker').textContent = 'a place to literally wrestle with your ideas';
   $('#arena-idea-name').textContent = 'the dojo';
   $('#arena-scene').setAttribute('aria-label', 'An empty dojo mat waiting for an invited idea');
   $('#arena-scene').dataset.movement = 'disabled';
