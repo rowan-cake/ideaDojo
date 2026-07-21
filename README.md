@@ -3,7 +3,7 @@
 Idea Dojo is a quiet, playful practice for developing unfinished creative ideas. Instead of treating an idea as a task to complete or an opponent to defeat, the app gives it a living form that can be planted, chased, wrestled with, questioned, and eventually allowed to settle.
 
 - **Live demo:** [idea-dojo-private-alpha.cakerowan.chatgpt.site](https://idea-dojo-private-alpha.cakerowan.chatgpt.site)
-- **Demo video:** Public YouTube link to be added before the submission deadline
+- **Demo video:** [Idea Dojo — OpenAI Build Week 2026](https://youtu.be/wE5Ewevj1Sc)
 - **OpenAI Build Week category:** Apps for Your Life
 
 ## What it does

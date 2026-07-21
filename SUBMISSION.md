@@ -7,7 +7,7 @@
 - **Entrant:** Rowan Cake, solo entrant
 - **Repository:** https://github.com/rowan-cake/ideaDojo
 - **Live demo:** https://idea-dojo-private-alpha.cakerowan.chatgpt.site
-- **YouTube demo:** TODO — add the public, sub-three-minute video URL
+- **YouTube demo:** https://youtu.be/wE5Ewevj1Sc
 - **Codex Session ID:** TODO — run `/feedback` in the primary GPT-5.6 build thread and paste the generated ID into Devpost
 
 ## Project description
@@ -20,10 +20,10 @@ GPT-5.6 powered the primary Codex development workflow. Codex helped transform t
 
 ## Final submission checklist
 
-- [ ] Upload a public YouTube video shorter than three minutes.
+- [x] Upload a public YouTube video shorter than three minutes.
 - [ ] Confirm the video includes audio explaining the product and the distinct roles of Codex, GPT-5.6, and Gemini.
 - [ ] Confirm the video contains no unlicensed music and does not display the two published book quotations.
-- [ ] Add the YouTube URL to this file and `README.md`.
+- [x] Add the YouTube URL to this file and `README.md`.
 - [ ] Run `/feedback` in the primary GPT-5.6 Codex thread and paste the Session ID into Devpost.
 - [ ] Confirm the repository is public and the MIT license renders on GitHub.
 - [ ] Confirm the Sites demo is public and works in a signed-out browser.
