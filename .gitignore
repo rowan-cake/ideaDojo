@@ -6,3 +6,4 @@ dist/
 .DS_Store
 server/data/*.json
 server/data/*.tmp
+outputs/
