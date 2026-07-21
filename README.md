@@ -92,7 +92,7 @@ Codex accelerated the project by:
 
 The key product and design decisions remained human-led: wrestling should mean constructive engagement rather than combat; every visit should begin on an empty mat; planting belongs in the labyrinth; ideas should ask plain, specific reflective questions; and the final state should be peaceful settlement rather than defeat. Codex helped translate those decisions into implementation plans, code, tests, and deployable infrastructure.
 
-The `/feedback` Session ID from the primary GPT-5.6 Codex thread is supplied directly in the Devpost submission.
+The `/feedback` Session ID from the primary GPT-5.6 Codex thread is `019f76ea-cc6b-7aa0-9122-981403ef7366`.
 
 ## API overview
 
