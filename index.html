@@ -18,7 +18,23 @@
           <a class="nav-link active" href="/" data-route-to="/" data-nav="dojo">the dojo <span class="nav-dot"></span></a>
           <a class="nav-link" href="/labyrinth" data-route-to="/labyrinth" data-nav="labyrinth">the labyrinth</a>
         </nav>
-        <button class="profile-button" aria-label="Open profile"> <span>⌄</span></button>
+        <div class="account-menu" id="account-menu">
+          <button class="profile-button" id="account-trigger" type="button" aria-label="Open account menu" aria-controls="account-popover" aria-expanded="false"><span id="account-trigger-label">sign in</span><span aria-hidden="true">⌄</span></button>
+          <section class="account-popover hidden" id="account-popover" aria-label="Account">
+            <div id="account-signed-out">
+              <span class="account-kicker">your private practice</span>
+              <h2>Keep your ideas close.</h2>
+              <p>Sign in with ChatGPT so your labyrinth belongs only to you.</p>
+              <a class="primary-button" id="account-sign-in" href="/signin-with-chatgpt?return_to=%2F">sign in with ChatGPT <span>→</span></a>
+              <span class="account-status" id="account-status" role="status" aria-live="polite">checking sign-in…</span>
+            </div>
+            <div class="account-user hidden" id="account-signed-in">
+              <div class="account-identity"><span id="account-initials" aria-hidden="true">ID</span><span><strong id="account-name">signed in</strong><small id="account-email"></small></span></div>
+              <p>Your ideas and practice are stored separately from every other visitor.</p>
+              <a class="secondary-button" id="account-sign-out" href="/signout-with-chatgpt?return_to=%2F">sign out</a>
+            </div>
+          </section>
+        </div>
       </header>
 
       <section class="view labyrinth-view hidden" id="labyrinth-view" data-view-panel="labyrinth">
@@ -174,7 +190,7 @@
           <a class="back-button encounter-only" href="/dojo/ideas" data-route-to="/dojo/ideas">← choose an idea</a>
           <span class="header-spacer empty-only" aria-hidden="true"></span>
           <div class="arena-title"><span class="eyebrow" id="arena-kicker">a place to literally wrestle with your ideas</span><h2 id="arena-idea-name">the dojo</h2></div>
-          <span class="round-count encounter-only">no points</span>
+          <span class="round-count encounter-only" id="encounter-count">practice · 0 / 3</span>
           <span class="round-count empty-only">waiting</span>
         </div>
 
